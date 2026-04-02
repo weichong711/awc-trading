@@ -313,11 +313,24 @@ export function ProfitAnalytics({
         ? "print-target-receipt"
         : "print-target-analytics",
     );
+
+    const cleanup = () => {
+      document.body.classList.remove(
+        "print-target-receipt",
+        "print-target-analytics",
+      );
+      window.removeEventListener("afterprint", cleanup);
+    };
+
+    window.addEventListener("afterprint", cleanup, { once: true });
+
+    // Force a style/layout flush so print CSS applies, but keep this synchronous
+    // so browsers still treat it as a user-initiated print.
+    document.body.getBoundingClientRect();
     window.print();
-    document.body.classList.remove(
-      "print-target-receipt",
-      "print-target-analytics",
-    );
+
+    // Fallback cleanup (some mobile browsers don't fire afterprint reliably)
+    setTimeout(cleanup, 1500);
   };
 
   const periodLabel =
