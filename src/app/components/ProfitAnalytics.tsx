@@ -106,16 +106,22 @@ export function ProfitAnalytics({
 
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [selectedMonth, setSelectedMonth] = useState("all");
+
   const [txYear, setTxYear] = useState(currentYear.toString());
   const [txMonth, setTxMonth] = useState("all");
   const [txShowAll, setTxShowAll] = useState(false);
+
   const [expYear, setExpYear] = useState(currentYear.toString());
   const [expMonth, setExpMonth] = useState("all");
   const [expShowAll, setExpShowAll] = useState(false);
+
   const [topYear, setTopYear] = useState(currentYear.toString());
   const [topMonth, setTopMonth] = useState("all");
+
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  const [analyticsReceiptOpen, setAnalyticsReceiptOpen] = useState(false);
 
   const matchDate = (date: Date, year: string, month: string) => {
     const d = new Date(date);
@@ -285,6 +291,7 @@ export function ProfitAnalytics({
     data.forEach((d) => {
       d.profit = d.sales - d.cost;
     });
+
     return data;
   }, [selectedYear, orders, expenses]);
 
@@ -313,65 +320,21 @@ export function ProfitAnalytics({
     );
   };
 
-  const periodLabel = (() => {
-    if (selectedMonth === "all") return `${selectedYear} (All Months)`;
-    const m = Number(selectedMonth);
-    const label = MONTH_LABELS[m] || selectedMonth;
-    return `${selectedYear} (${label})`;
-  })();
+  const periodLabel =
+    selectedMonth === "all"
+      ? `${selectedYear} (All Months)`
+      : `${selectedYear} (${MONTH_LABELS[Number(selectedMonth)]})`;
 
   const SHOW_LIMIT = 20;
 
   return (
     <div className="space-y-6">
-      {/* Hidden print: analytics summary (80mm) */}
-      <div id="print-analytics" className="print-only space-y-3 font-mono text-sm">
-        <div className="text-center border-b-2 border-dashed border-black pb-4 mb-2">
-          <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
-          <p className="text-xs">Analytics Summary</p>
-          <p className="text-xs">{new Date().toLocaleString()}</p>
-        </div>
-
-        <div className="space-y-1 border-b border-dashed pb-3">
-          <div className="flex justify-between">
-            <span>Period</span>
-            <span className="font-bold">{periodLabel}</span>
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <div className="flex justify-between">
-            <span>Today Sales</span>
-            <span>RM {todaySales.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Total Sales</span>
-            <span>RM {totalSales.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Total Expenses</span>
-            <span>RM {totalCost.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between font-bold border-t-2 border-dashed pt-2">
-            <span>Net Profit</span>
-            <span>RM {profit.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between text-xs pt-1">
-            <span>Profit Margin</span>
-            <span>{profitMargin.toFixed(1)}%</span>
-          </div>
-        </div>
-
-        <div className="text-center text-xs border-t border-dashed pt-3">
-          <p>— End of Summary —</p>
-        </div>
-      </div>
-
       {/* Filter row */}
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm font-medium text-muted-foreground">
           {a.showingFor}
         </span>
+
         <YearMonthFilter
           year={selectedYear}
           month={selectedMonth}
@@ -381,7 +344,7 @@ export function ProfitAnalytics({
         />
 
         <div className="ml-auto">
-          <Button variant="outline" onClick={() => printWithTarget("analytics")}>
+          <Button variant="outline" onClick={() => setAnalyticsReceiptOpen(true)}>
             <Printer className="mr-2 h-4 w-4" />
             Print Summary
           </Button>
@@ -523,6 +486,7 @@ export function ProfitAnalytics({
               </CardTitle>
               <CardDescription>{a.transactionDesc}</CardDescription>
             </div>
+
             <YearMonthFilter
               year={txYear}
               month={txMonth}
@@ -538,6 +502,7 @@ export function ProfitAnalytics({
             />
           </div>
         </CardHeader>
+
         <CardContent>
           {transactions.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -556,6 +521,7 @@ export function ProfitAnalytics({
                       .toFixed(2)}
                   </span>
                 </p>
+
                 {transactions.length > SHOW_LIMIT && (
                   <Button
                     variant="ghost"
@@ -585,11 +551,10 @@ export function ProfitAnalytics({
                       <TableHead>{a.orderId}</TableHead>
                       <TableHead>{a.items}</TableHead>
                       <TableHead className="text-right">{a.amount}</TableHead>
-                      <TableHead className="text-right">
-                        {t.common.actions}
-                      </TableHead>
+                      <TableHead className="text-right">{t.common.actions}</TableHead>
                     </TableRow>
                   </TableHeader>
+
                   <TableBody>
                     {(txShowAll ? transactions : transactions.slice(0, SHOW_LIMIT)).map(
                       (tx) => (
@@ -597,9 +562,7 @@ export function ProfitAnalytics({
                           <TableCell className="text-sm whitespace-nowrap">
                             {new Date(tx.date).toLocaleString()}
                           </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            #{tx.id}
-                          </TableCell>
+                          <TableCell className="font-mono text-sm">#{tx.id}</TableCell>
                           <TableCell className="text-sm max-w-[220px] truncate">
                             {tx.items}
                           </TableCell>
@@ -618,28 +581,18 @@ export function ProfitAnalytics({
                             {onVoidOrder && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-red-600"
-                                  >
+                                  <Button variant="ghost" size="sm" className="text-red-600">
                                     <XCircle className="h-4 w-4" />
                                   </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>{a.voidOrder}</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      {a.voidOrderConfirm}
-                                    </AlertDialogDescription>
+                                    <AlertDialogDescription>{a.voidOrderConfirm}</AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
-                                    <AlertDialogCancel>
-                                      {t.common.cancel}
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => onVoidOrder(tx.id)}
-                                    >
+                                    <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => onVoidOrder(tx.id)}>
                                       {a.voidOrder}
                                     </AlertDialogAction>
                                   </AlertDialogFooter>
@@ -653,15 +606,6 @@ export function ProfitAnalytics({
                   </TableBody>
                 </Table>
               </div>
-
-              {!txShowAll && transactions.length > SHOW_LIMIT && (
-                <p className="text-center text-xs text-muted-foreground mt-3">
-                  {a.showing} {SHOW_LIMIT} {a.of} {transactions.length} —{" "}
-                  <button className="underline" onClick={() => setTxShowAll(true)}>
-                    {a.showAll}
-                  </button>
-                </p>
-              )}
             </>
           )}
         </CardContent>
@@ -678,6 +622,7 @@ export function ProfitAnalytics({
               </CardTitle>
               <CardDescription>{a.expenseHistoryDesc}</CardDescription>
             </div>
+
             <YearMonthFilter
               year={expYear}
               month={expMonth}
@@ -769,9 +714,7 @@ export function ProfitAnalytics({
                           </TableCell>
                           <TableCell>
                             {exp.quantity}{" "}
-                            <span className="text-muted-foreground text-xs">
-                              {exp.unit}
-                            </span>
+                            <span className="text-muted-foreground text-xs">{exp.unit}</span>
                           </TableCell>
                           <TableCell className="text-right">
                             RM {exp.costPerUnit.toFixed(2)}
@@ -801,19 +744,14 @@ export function ProfitAnalytics({
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader>
-                                    <AlertDialogTitle>
-                                      {a.deleteExpense}
-                                    </AlertDialogTitle>
+                                    <AlertDialogTitle>{a.deleteExpense}</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      <strong>{exp.productName}</strong> — RM{" "}
-                                      {exp.totalCost.toFixed(2)}?{" "}
+                                      <strong>{exp.productName}</strong> — RM {exp.totalCost.toFixed(2)}?{" "}
                                       {a.deleteExpenseConfirm}
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
-                                    <AlertDialogCancel>
-                                      {t.common.cancel}
-                                    </AlertDialogCancel>
+                                    <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
                                     <AlertDialogAction
                                       className="bg-red-600 hover:bg-red-700"
                                       onClick={() => onDeleteExpense(exp.id)}
@@ -831,15 +769,6 @@ export function ProfitAnalytics({
                   </TableBody>
                 </Table>
               </div>
-
-              {!expShowAll && expenseHistory.length > SHOW_LIMIT && (
-                <p className="text-center text-xs text-muted-foreground mt-3">
-                  {a.showing} {SHOW_LIMIT} {a.of} {expenseHistory.length} —{" "}
-                  <button className="underline" onClick={() => setExpShowAll(true)}>
-                    {a.showAll}
-                  </button>
-                </p>
-              )}
             </>
           )}
         </CardContent>
@@ -853,6 +782,7 @@ export function ProfitAnalytics({
               <CardTitle>{a.topProducts}</CardTitle>
               <CardDescription>{a.topProductsDesc}</CardDescription>
             </div>
+
             <YearMonthFilter
               year={topYear}
               month={topMonth}
@@ -874,54 +804,104 @@ export function ProfitAnalytics({
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={topProducts}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="name"
-                    fontSize={12}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                  />
+                  <XAxis dataKey="name" fontSize={12} angle={-45} textAnchor="end" height={80} />
                   <YAxis />
                   <Tooltip formatter={(v) => `RM ${Number(v).toFixed(2)}`} />
                   <Bar key="bar-revenue" dataKey="revenue" fill="#0088FE" name={a.revenue} />
                 </BarChart>
               </ResponsiveContainer>
-
-              <div className="mt-6 border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{a.rank}</TableHead>
-                      <TableHead>{t.expenses.product}</TableHead>
-                      <TableHead className="text-right">{a.qtySold}</TableHead>
-                      <TableHead className="text-right">{a.revenue}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {topProducts.map((p, i) => (
-                      <TableRow key={p.productKey}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {i < 3 && <Award className="h-4 w-4 text-amber-500" />}
-                            {i + 1}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="text-right">{p.quantity.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          RM {p.revenue.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
             </>
           )}
         </CardContent>
       </Card>
 
-      {/* Receipt Dialog */}
+      {/* Analytics receipt popup */}
+      <Dialog open={analyticsReceiptOpen} onOpenChange={setAnalyticsReceiptOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="sr-only">Analytics Receipt</DialogTitle>
+            <DialogDescription className="sr-only">
+              Print analytics summary (80mm)
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Printable block */}
+          <div id="print-analytics" className="print-only space-y-3 font-mono text-sm">
+            <div className="text-center border-b-2 border-dashed pb-4">
+              <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
+              <p className="text-xs">ANALYTICS SUMMARY</p>
+            </div>
+
+            <div className="space-y-1 border-b border-dashed pb-3">
+              <div className="flex justify-between">
+                <span>Date:</span>
+                <span>{new Date().toLocaleDateString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Time:</span>
+                <span>{new Date().toLocaleTimeString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Period:</span>
+                <span className="font-bold">{periodLabel}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <span>Today Sales</span>
+                <span>RM {todaySales.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Sales</span>
+                <span>RM {totalSales.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Expenses</span>
+                <span>RM {totalCost.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between text-base font-bold border-t-2 border-dashed pt-2">
+                <span>Net Profit</span>
+                <span>RM {profit.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between text-xs pt-1">
+                <span>Profit Margin</span>
+                <span>{profitMargin.toFixed(1)}%</span>
+              </div>
+            </div>
+
+            <div className="text-center text-xs border-t border-dashed pt-3">
+              <p>— End —</p>
+            </div>
+          </div>
+
+          {/* Close above Print (Print will immediately open print dialog) */}
+          <DialogFooter className="flex flex-col gap-2 sm:flex-col">
+            <Button
+              variant="outline"
+              onClick={() => setAnalyticsReceiptOpen(false)}
+              className="w-full"
+            >
+              {t.common.close}
+            </Button>
+
+            <Button
+              onClick={() => {
+                printWithTarget("analytics"); // immediately opens print dialog
+                setAnalyticsReceiptOpen(false);
+              }}
+              className="w-full"
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              Print Summary
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Order receipt popup */}
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -932,10 +912,7 @@ export function ProfitAnalytics({
           </DialogHeader>
 
           {selectedOrder && (
-            <div
-              id="print-receipt"
-              className="print-only space-y-4 font-mono text-sm"
-            >
+            <div id="print-receipt" className="print-only space-y-4 font-mono text-sm">
               <div className="text-center border-b-2 border-dashed pb-4">
                 <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
                 <p className="text-xs">{t.orders.officialReceipt}</p>
@@ -1005,11 +982,17 @@ export function ProfitAnalytics({
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReceiptOpen(false)}>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-col">
+            <Button variant="outline" onClick={() => setReceiptOpen(false)} className="w-full">
               {t.common.close}
             </Button>
-            <Button onClick={() => printWithTarget("receipt")}>
+            <Button
+              onClick={() => {
+                printWithTarget("receipt"); // immediately opens print dialog
+                setReceiptOpen(false);
+              }}
+              className="w-full"
+            >
               <Printer className="mr-2 h-4 w-4" />
               {t.orders.printReceipt}
             </Button>
