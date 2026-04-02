@@ -1,14 +1,17 @@
-#print-receipt, #print-analytics { display: none; }
+/* Hide print containers on screen */
+#print-receipt,
+#print-analytics {
+  display: none;
+}
+
 @media print {
   * { visibility: hidden !important; }
 
-  /* Default: print receipt */
   body.print-target-receipt #print-receipt,
   body.print-target-receipt #print-receipt * {
     visibility: visible !important;
   }
 
-  /* Analytics print */
   body.print-target-analytics #print-analytics,
   body.print-target-analytics #print-analytics * {
     visibility: visible !important;
@@ -24,8 +27,8 @@
 
   @page { size: 80mm auto; margin: 0; }
 
-  /* Put BOTH print containers in same 80mm style */
-  #print-receipt, #print-analytics {
+  #print-receipt,
+  #print-analytics {
     display: block !important;
     position: absolute !important;
     left: 0 !important;
