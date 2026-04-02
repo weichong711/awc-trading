@@ -69,6 +69,7 @@ import {
   AlertDialogTrigger,
 } from "./ui/alert-dialog";
 import { useLanguage } from "../contexts/LanguageContext";
+import { printElementById } from "../../lib/print";
 
 const MONTH_LABELS = [
   "January",
@@ -304,33 +305,8 @@ export function ProfitAnalytics({
   };
 
   const printWithTarget = (target: "receipt" | "analytics") => {
-    document.body.classList.remove(
-      "print-target-receipt",
-      "print-target-analytics",
-    );
-    document.body.classList.add(
-      target === "receipt"
-        ? "print-target-receipt"
-        : "print-target-analytics",
-    );
-
-    const cleanup = () => {
-      document.body.classList.remove(
-        "print-target-receipt",
-        "print-target-analytics",
-      );
-      window.removeEventListener("afterprint", cleanup);
-    };
-
-    window.addEventListener("afterprint", cleanup, { once: true });
-
-    // Force a style/layout flush so print CSS applies, but keep this synchronous
-    // so browsers still treat it as a user-initiated print.
-    document.body.getBoundingClientRect();
-    window.print();
-
-    // Fallback cleanup (some mobile browsers don't fire afterprint reliably)
-    setTimeout(cleanup, 1500);
+    const id = target === "receipt" ? "print-receipt" : "print-analytics";
+    void printElementById(id, target);
   };
 
   const periodLabel =
