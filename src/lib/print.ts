@@ -1,3 +1,6 @@
+/// <reference types="vite/client" />
+import printCss from "../styles/print.css?raw";
+
 export type PrintTarget = "receipt" | "analytics";
 
 function copyHeadStyles(fromDoc: Document, toDoc: Document) {
@@ -5,60 +8,26 @@ function copyHeadStyles(fromDoc: Document, toDoc: Document) {
     fromDoc.head.querySelectorAll('style, link[rel="stylesheet"]'),
   );
   for (const n of nodes) {
-    // Some browsers may block adopting nodes across documents; clone instead.
     toDoc.head.insertAdjacentHTML("beforeend", (n as HTMLElement).outerHTML);
   }
 }
 
-function waitForStylesheetLoad(doc: Document, timeoutMs: number) {
-  return new Promise<void>((resolve) => {
-    const links = Array.from(
-      doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
-    );
-    if (links.length === 0) {
-      resolve();
-      return;
-    }
-
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      resolve();
-    };
-
-    const t = window.setTimeout(finish, timeoutMs);
-    let remaining = links.length;
-
-    for (const link of links) {
-      const onDone = () => {
-        remaining -= 1;
-        if (remaining <= 0) {
-          window.clearTimeout(t);
-          finish();
-        }
-      };
-      link.addEventListener("load", onDone, { once: true });
-      link.addEventListener("error", onDone, { once: true });
-    }
-  });
-}
-
-export async function printElementById(id: string, target: PrintTarget) {
+/**
+ * Print a DOM node by id inside a hidden iframe.
+ *
+ * Important for Android Chrome / tablets: `print()` must run in the **same
+ * synchronous turn** as the user's tap. Any `await` / delayed `print()` can
+ * look like "Chrome flashes and exits" or a blank preview.
+ */
+export function printElementById(id: string, target: PrintTarget) {
   const el = document.getElementById(id);
   if (!el) return;
 
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-  iframe.style.opacity = "0";
-  iframe.style.pointerEvents = "none";
-  iframe.style.zIndex = "-1";
+  // Avoid 0×0 iframes — some WebViews behave badly; keep off-screen instead.
+  iframe.style.cssText =
+    "position:fixed;left:-9999px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;z-index:-1";
 
   document.body.appendChild(iframe);
 
@@ -73,29 +42,31 @@ export async function printElementById(id: string, target: PrintTarget) {
   frameDoc.write("<!doctype html><html><head></head><body></body></html>");
   frameDoc.close();
 
-  copyHeadStyles(document, frameDoc);
-  frameDoc.body.className = target === "receipt" ? "print-target-receipt" : "print-target-analytics";
+  // Receipt print rules (no network wait — avoids async gap before print()).
+  const style = frameDoc.createElement("style");
+  style.textContent = printCss;
+  frameDoc.head.appendChild(style);
 
-  // Clone the printable node into the iframe.
+  copyHeadStyles(document, frameDoc);
+
+  frameDoc.body.className =
+    target === "receipt"
+      ? "print-target-receipt"
+      : "print-target-analytics";
+
   const clone = el.cloneNode(true) as HTMLElement;
   clone.style.display = "block";
   frameDoc.body.appendChild(clone);
 
-  // Allow styles to load + layout to settle before printing.
-  await waitForStylesheetLoad(frameDoc, 1200);
   frameDoc.body.getBoundingClientRect();
 
-  // Keep print call synchronous with the user gesture as much as possible.
-  // (This function should be invoked directly in the click handler.)
   frameWin.focus();
   frameWin.print();
 
-  // Cleanup after printing (some mobile browsers never fire afterprint).
   const cleanup = () => {
     frameWin.removeEventListener("afterprint", cleanup);
     iframe.remove();
   };
   frameWin.addEventListener("afterprint", cleanup, { once: true });
-  window.setTimeout(cleanup, 2000);
+  window.setTimeout(cleanup, 3000);
 }
-
