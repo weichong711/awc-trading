@@ -1,16 +1,24 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
-  ShoppingCart,
-  Plus,
-  Minus,
-  Trash2,
-  Receipt,
+  TrendingUp,
   DollarSign,
+  ShoppingBag,
+  Award,
+  Printer,
+  XCircle,
+  Receipt,
+  PackageOpen,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
-import { Input } from "./ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
 import {
   Select,
   SelectContent,
@@ -18,8 +26,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import { ScrollArea } from "./ui/scroll-area";
-import { Product, OrderItem, Order, UnitType } from "../types/business";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import { Badge } from "./ui/badge";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  Legend,
+} from "recharts";
+import { Order, Expense } from "../types/business";
+import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
@@ -28,494 +57,851 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Label } from "./ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "./ui/alert-dialog";
 import { useLanguage } from "../contexts/LanguageContext";
 import { printElementById } from "../../lib/print";
 
-interface OrderSummaryProps {
-  products: Product[];
-  onPlaceOrder: (order: Omit<Order, "id">) => void;
+const MONTH_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+interface ProfitAnalyticsProps {
+  orders: Order[];
+  expenses: Expense[];
+  onVoidOrder?: (orderId: string) => void;
+  onDeleteExpense?: (id: string) => void;
 }
 
-export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
+export function ProfitAnalytics({
+  orders,
+  expenses,
+  onVoidOrder,
+  onDeleteExpense,
+}: ProfitAnalyticsProps) {
   const { t } = useLanguage();
+  const a = t.analytics;
 
-  const [cart, setCart] = useState<OrderItem[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [quantity, setQuantity] = useState(1);
-  const [selectedUnit, setSelectedUnit] = useState<UnitType>("unit");
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 4 + i);
 
-  const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
-  const [lastOrder, setLastOrder] = useState<Order | null>(null);
+  const [selectedYear, setSelectedYear] = useState(currentYear.toString());
+  const [selectedMonth, setSelectedMonth] = useState("all");
 
-  const [discountType, setDiscountType] = useState<"percentage" | "fixed">(
-    "percentage",
-  );
-  const [discount, setDiscount] = useState(0);
+  const [txYear, setTxYear] = useState(currentYear.toString());
+  const [txMonth, setTxMonth] = useState("all");
+  const [txShowAll, setTxShowAll] = useState(false);
 
-  // Only show products that are not hidden from orders
-  const visibleProducts = products.filter((p) => p.showInOrders !== false);
-  const categories = [...new Set(visibleProducts.map((p) => p.category))];
+  const [expYear, setExpYear] = useState(currentYear.toString());
+  const [expMonth, setExpMonth] = useState("all");
+  const [expShowAll, setExpShowAll] = useState(false);
 
-  const handleProductClick = (product: Product) => {
-    setSelectedProduct(product);
-    setSelectedUnit(product.unit);
-    setQuantity(1);
-    setDialogOpen(true);
-  };
+  const [topYear, setTopYear] = useState(currentYear.toString());
+  const [topMonth, setTopMonth] = useState("all");
 
-  const handleAddToCart = () => {
-    if (!selectedProduct) return;
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-    const existingItem = cart.find(
-      (item) =>
-        item.productId === selectedProduct.id && item.unit === selectedUnit,
+  const [analyticsReceiptOpen, setAnalyticsReceiptOpen] = useState(false);
+
+  const matchDate = (date: Date, year: string, month: string) => {
+    const d = new Date(date);
+    return (
+      d.getFullYear() === parseInt(year) &&
+      (month === "all" || d.getMonth() === parseInt(month))
     );
+  };
 
-    if (existingItem) {
-      setCart(
-        cart.map((item) =>
-          item.productId === selectedProduct.id && item.unit === selectedUnit
-            ? {
-                ...item,
-                quantity: item.quantity + quantity,
-                total: (item.quantity + quantity) * item.price,
-              }
-            : item,
+  const YearMonthFilter = ({
+    year,
+    month,
+    years,
+    onYearChange,
+    onMonthChange,
+  }: {
+    year: string;
+    month: string;
+    years: number[];
+    onYearChange: (v: string) => void;
+    onMonthChange: (v: string) => void;
+  }) => (
+    <div className="flex gap-2">
+      <Select value={year} onValueChange={onYearChange}>
+        <SelectTrigger className="w-[110px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {years.map((y) => (
+            <SelectItem key={y} value={y.toString()}>
+              {y}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select value={month} onValueChange={onMonthChange}>
+        <SelectTrigger className="w-[140px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Months</SelectItem>
+          {MONTH_LABELS.map((label, i) => (
+            <SelectItem key={i} value={i.toString()}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const today = new Date().toDateString();
+  const todayOrders = orders.filter(
+    (o) =>
+      new Date(o.date).toDateString() === today && o.status === "completed",
+  );
+  const todaySales = todayOrders.reduce((s, o) => s + o.total, 0);
+
+  const filteredOrders = orders.filter(
+    (o) =>
+      matchDate(o.date, selectedYear, selectedMonth) &&
+      o.status === "completed",
+  );
+  const filteredExpenses = expenses.filter((e) =>
+    matchDate(e.date, selectedYear, selectedMonth),
+  );
+
+  const totalSales = filteredOrders.reduce((s, o) => s + o.total, 0);
+  const totalCost = filteredExpenses.reduce((s, e) => s + e.totalCost, 0);
+  const profit = totalSales - totalCost;
+  const profitMargin = totalSales > 0 ? (profit / totalSales) * 100 : 0;
+
+  const transactions = useMemo(
+    () =>
+      orders
+        .filter(
+          (o) =>
+            matchDate(o.date, txYear, txMonth) && o.status === "completed",
+        )
+        .sort(
+          (a1, b1) =>
+            new Date(b1.date).getTime() - new Date(a1.date).getTime(),
+        )
+        .map((o) => ({
+          id: o.id,
+          date: o.date,
+          items: o.items
+            .map((i) => `${i.productName} (${i.quantity} ${i.unit})`)
+            .join(", "),
+          amount: o.total,
+        })),
+    [orders, txYear, txMonth],
+  );
+
+  const expenseHistory = useMemo(
+    () =>
+      expenses
+        .filter((e) => matchDate(e.date, expYear, expMonth))
+        .sort(
+          (a1, b1) =>
+            new Date(b1.date).getTime() - new Date(a1.date).getTime(),
         ),
+    [expenses, expYear, expMonth],
+  );
+  const expenseHistoryTotal = expenseHistory.reduce(
+    (s, e) => s + e.totalCost,
+    0,
+  );
+
+  const topProducts = useMemo(() => {
+    const map = new Map<string, { quantity: number; revenue: number }>();
+    orders
+      .filter(
+        (o) =>
+          matchDate(o.date, topYear, topMonth) && o.status === "completed",
+      )
+      .forEach((o) =>
+        o.items.forEach((item) => {
+          const ex = map.get(item.productName) || {
+            quantity: 0,
+            revenue: 0,
+          };
+          map.set(item.productName, {
+            quantity: ex.quantity + item.quantity,
+            revenue: ex.revenue + item.total,
+          });
+        }),
       );
-    } else {
-      const newItem: OrderItem = {
-        productId: selectedProduct.id,
-        productName: selectedProduct.name,
-        quantity,
-        unit: selectedUnit,
-        price: selectedProduct.price,
-        total: selectedProduct.price * quantity,
-      };
-      setCart([...cart, newItem]);
+
+    return Array.from(map.entries())
+      .map(([name, stats], i) => ({
+        productKey: `${topYear}-${topMonth}-${name}-${i}`,
+        name,
+        ...stats,
+      }))
+      .sort((a1, b1) => b1.revenue - a1.revenue)
+      .slice(0, 10);
+  }, [orders, topYear, topMonth]);
+
+  const monthlyData = useMemo(() => {
+    const data = Array.from({ length: 12 }, (_, i) => ({
+      monthKey: `${selectedYear}-${i}`,
+      month: MONTH_LABELS[i].substring(0, 3),
+      sales: 0,
+      cost: 0,
+      profit: 0,
+    }));
+
+    orders.forEach((o) => {
+      const d = new Date(o.date);
+      if (
+        d.getFullYear() === parseInt(selectedYear) &&
+        o.status === "completed"
+      ) {
+        data[d.getMonth()].sales += o.total;
+      }
+    });
+
+    expenses.forEach((e) => {
+      const d = new Date(e.date);
+      if (d.getFullYear() === parseInt(selectedYear)) {
+        data[d.getMonth()].cost += e.totalCost;
+      }
+    });
+
+    data.forEach((d) => {
+      d.profit = d.sales - d.cost;
+    });
+
+    return data;
+  }, [selectedYear, orders, expenses]);
+
+  const handleViewReceipt = (orderId: string) => {
+    const o = orders.find((x) => x.id === orderId);
+    if (o) {
+      setSelectedOrder(o);
+      setReceiptOpen(true);
     }
-
-    setDialogOpen(false);
-    setSelectedProduct(null);
   };
 
-  const updateCartItemQuantity = (index: number, delta: number) => {
-    const newCart = [...cart];
-    const newQuantity = newCart[index].quantity + delta;
-
-    if (newQuantity <= 0) {
-      removeFromCart(index);
-    } else {
-      newCart[index].quantity = newQuantity;
-      newCart[index].total = newQuantity * newCart[index].price;
-      setCart(newCart);
-    }
+  const printWithTarget = (target: "receipt" | "analytics") => {
+    const id = target === "receipt" ? "print-receipt" : "print-analytics";
+    void printElementById(id, target);
   };
 
-  const removeFromCart = (index: number) => {
-    setCart(cart.filter((_, i) => i !== index));
-  };
+  const periodLabel =
+    selectedMonth === "all"
+      ? `${selectedYear} (All Months)`
+      : `${selectedYear} (${MONTH_LABELS[Number(selectedMonth)]})`;
 
-  const getSubtotal = () => cart.reduce((sum, item) => sum + item.total, 0);
-
-  const getDiscountAmount = () => {
-    if (discountType === "percentage") {
-      return (getSubtotal() * discount) / 100;
-    }
-    return discount;
-  };
-
-  const getFinalTotal = () => getSubtotal() - getDiscountAmount();
-
-  const handlePlaceOrder = () => {
-    if (cart.length === 0) return;
-
-    const subtotal = getSubtotal();
-    const discountAmount = getDiscountAmount();
-    const finalTotal = getFinalTotal();
-
-    const order: Omit<Order, "id"> = {
-      items: cart,
-      subtotal,
-      discountType,
-      discount,
-      discountAmount,
-      total: finalTotal,
-      date: new Date(),
-      status: "completed",
-    };
-
-    const id = Date.now().toString();
-
-    onPlaceOrder(order);
-    setLastOrder({ ...order, id });
-    setCart([]);
-    setDiscount(0);
-    setReceiptDialogOpen(true);
-  };
-
-  const printReceipt = () => {
-    // Use an isolated print iframe for better mobile/tablet compatibility.
-    void printElementById("print-receipt", "receipt");
-  };
+  const SHOW_LIMIT = 20;
 
   return (
-    <div className="p-6">
-      {/* Hidden printable receipt (80mm) */}
-      {lastOrder && (
-        <div id="print-receipt" className="space-y-4 font-mono text-sm">
-          {/* Header */}
-          <div className="text-center border-b-2 border-dashed border-black pb-4">
-            <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
-            <p className="text-xs">{t.orders.officialReceipt}</p>
-          </div>
+    <div className="space-y-6">
+      {/* Filter row */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-muted-foreground">
+          {a.showingFor}
+        </span>
 
-          {/* Order Info */}
-          <div className="space-y-1 border-b border-dashed border-black pb-3">
-            <div className="flex justify-between">
-              <span>{t.orders.receiptNo}:</span>
-              <span className="font-bold">#{lastOrder.id}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>{t.common.date}:</span>
-              <span>{new Date(lastOrder.date).toLocaleDateString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Time:</span>
-              <span>{new Date(lastOrder.date).toLocaleTimeString()}</span>
-            </div>
-          </div>
+        <YearMonthFilter
+          year={selectedYear}
+          month={selectedMonth}
+          years={yearOptions}
+          onYearChange={setSelectedYear}
+          onMonthChange={setSelectedMonth}
+        />
 
-          {/* Items */}
-          <div className="border-b-2 border-dashed border-black pb-3">
-            <div className="font-bold mb-2">{t.orders.itemsLabel}</div>
-            {lastOrder.items.map((item, index) => (
-              <div key={index} className="mb-3">
-                <div className="flex justify-between">
-                  <span>{item.productName}</span>
-                </div>
-                <div className="flex justify-between text-xs pl-2">
-                  <span>
-                    {item.quantity} {item.unit} x RM {item.price.toFixed(2)}
-                  </span>
-                  <span className="font-bold">RM {item.total.toFixed(2)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Totals */}
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>{t.orders.subtotalLabel}</span>
-              <span>RM {lastOrder.subtotal.toFixed(2)}</span>
-            </div>
-
-            {lastOrder.discount > 0 && (
-              <div className="flex justify-between text-green-600">
-                <span>
-                  {t.orders.discount}{" "}
-                  {lastOrder.discountType === "percentage"
-                    ? `(${lastOrder.discount}%)`
-                    : t.orders.discountFixed}
-                  :
-                </span>
-                <span>- RM {lastOrder.discountAmount.toFixed(2)}</span>
-              </div>
-            )}
-
-            <div className="flex justify-between text-base font-bold border-t-2 border-dashed border-black pt-2">
-              <span>{t.orders.totalFinal}</span>
-              <span>RM {lastOrder.total.toFixed(2)}</span>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="text-center text-xs border-t border-dashed border-black pt-3">
-            <p>{t.orders.thankYou}</p>
-            <p className="mt-1">{t.orders.comeAgain}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Products Section */}
-        <div className="lg:col-span-2">
-          <div className="space-y-6">
-            {categories.map((category) => (
-              <div key={category}>
-                <h2 className="text-lg font-medium mb-3">{category}</h2>
-                <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {visibleProducts
-                    .filter((p) => p.category === category)
-                    .map((product) => (
-                      <Card
-                        key={product.id}
-                        className="cursor-pointer hover:shadow-lg transition-shadow"
-                        onClick={() => handleProductClick(product)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center overflow-hidden">
-                            {product.imageUrl ? (
-                              <img
-                                src={product.imageUrl}
-                                alt={product.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <DollarSign className="h-8 w-8 text-muted-foreground" />
-                            )}
-                          </div>
-                          <h3 className="font-medium text-sm mb-1 truncate">
-                            {product.name}
-                          </h3>
-                          <p className="text-lg font-medium text-primary">
-                            RM {product.price.toFixed(2)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {t.orders.pricePerUnit} {product.unit}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Cart Section */}
-        <div className="lg:col-span-1">
-          <Card className="sticky top-4">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <ShoppingCart className="h-5 w-5" />
-                  {t.orders.cart}
-                </CardTitle>
-                <Badge variant="secondary">
-                  {cart.length} {t.orders.items}
-                </Badge>
-              </div>
-            </CardHeader>
-
-            <CardContent>
-              <ScrollArea className="h-[400px] pr-4">
-                {cart.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <ShoppingCart className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">{t.orders.emptyCart}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {cart.map((item, index) => (
-                      <Card key={`${item.productId}-${index}`}>
-                        <CardContent className="p-3">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <p className="font-medium text-sm">{item.productName}</p>
-                              <p className="text-xs text-muted-foreground">
-                                RM {item.price.toFixed(2)} / {item.unit}
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeFromCart(index)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => updateCartItemQuantity(index, -1)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Minus className="h-4 w-4" />
-                              </Button>
-                              <span className="font-medium text-sm w-10 text-center">
-                                {item.quantity}
-                              </span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => updateCartItemQuantity(index, 1)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <p className="font-medium text-sm">
-                              RM {item.total.toFixed(2)}
-                            </p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-
-              <div className="mt-4 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="discount-type" className="text-sm">
-                    {t.orders.discountType}
-                  </Label>
-                  <Select
-                    value={discountType}
-                    onValueChange={(value: "percentage" | "fixed") => {
-                      setDiscountType(value);
-                      setDiscount(0);
-                    }}
-                    disabled={cart.length === 0}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="percentage">{t.orders.percentage}</SelectItem>
-                      <SelectItem value="fixed">{t.orders.fixedAmount}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="discount" className="text-sm">
-                    {discountType === "percentage"
-                      ? t.orders.discountPercentage
-                      : t.orders.discountAmount}
-                  </Label>
-                  <Input
-                    id="discount"
-                    type="number"
-                    min="0"
-                    max={discountType === "percentage" ? "100" : getSubtotal().toString()}
-                    step="0.01"
-                    value={discount}
-                    onChange={(e) => {
-                      const value = parseFloat(e.target.value) || 0;
-                      if (discountType === "percentage") {
-                        setDiscount(Math.min(100, Math.max(0, value)));
-                      } else {
-                        setDiscount(Math.min(getSubtotal(), Math.max(0, value)));
-                      }
-                    }}
-                    placeholder="0"
-                    disabled={cart.length === 0}
-                  />
-                </div>
-
-                {discount > 0 && (
-                  <div className="flex justify-between items-center text-sm text-green-600">
-                    <span>
-                      {t.orders.discount}{" "}
-                      {discountType === "percentage" ? `(${discount}%)` : ""}
-                    </span>
-                    <span>- RM {getDiscountAmount().toFixed(2)}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center font-medium text-lg border-t pt-2">
-                  <span>{t.orders.subtotal}</span>
-                  <span className="text-primary">
-                    RM {getFinalTotal().toFixed(2)}
-                  </span>
-                </div>
-
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={handlePlaceOrder}
-                  disabled={cart.length === 0}
-                >
-                  <Receipt className="mr-2 h-4 w-4" />
-                  {t.orders.placeOrder}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="ml-auto">
+          <Button variant="outline" onClick={() => setAnalyticsReceiptOpen(true)}>
+            <Printer className="mr-2 h-4 w-4" />
+            Print Summary
+          </Button>
         </div>
       </div>
 
-      {/* Add to Cart Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+      {/* Stat Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm">{a.todaySales}</CardTitle>
+            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl">RM {todaySales.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {todayOrders.length} {a.ordersToday}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm">{a.totalSales}</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl">RM {totalSales.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {filteredOrders.length} {a.completedOrders}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm">{a.totalExpenses}</CardTitle>
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl">RM {totalCost.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {filteredExpenses.length} {a.expenseEntries}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm">{a.netProfit}</CardTitle>
+            <TrendingUp
+              className={`h-4 w-4 ${
+                profit >= 0 ? "text-green-600" : "text-red-500"
+              }`}
+            />
+          </CardHeader>
+          <CardContent>
+            <div
+              className={`text-2xl ${
+                profit >= 0 ? "text-green-600" : "text-red-600"
+              }`}
+            >
+              RM {profit.toFixed(2)}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {profitMargin.toFixed(1)}% {a.margin}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Monthly Chart */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>{a.monthlyPerformance}</CardTitle>
+              <CardDescription>{a.monthlyDesc}</CardDescription>
+            </div>
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((y) => (
+                  <SelectItem key={y} value={y.toString()}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip formatter={(v) => `RM ${Number(v).toFixed(2)}`} />
+              <Legend />
+              <Line
+                key="line-sales"
+                type="monotone"
+                dataKey="sales"
+                stroke="#0088FE"
+                name={a.totalSales}
+                strokeWidth={2}
+              />
+              <Line
+                key="line-cost"
+                type="monotone"
+                dataKey="cost"
+                stroke="#FF8042"
+                name={a.totalExpenses}
+                strokeWidth={2}
+              />
+              <Line
+                key="line-profit"
+                type="monotone"
+                dataKey="profit"
+                stroke="#00C49F"
+                name={a.netProfit}
+                strokeWidth={2}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Transaction History */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingBag className="h-5 w-5 text-primary" />
+                {a.transactionHistory}
+              </CardTitle>
+              <CardDescription>{a.transactionDesc}</CardDescription>
+            </div>
+
+            <YearMonthFilter
+              year={txYear}
+              month={txMonth}
+              years={yearOptions}
+              onYearChange={(v) => {
+                setTxYear(v);
+                setTxShowAll(false);
+              }}
+              onMonthChange={(v) => {
+                setTxMonth(v);
+                setTxShowAll(false);
+              }}
+            />
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {transactions.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <ShoppingBag className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">{a.noTransactions}</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm text-muted-foreground">
+                  {transactions.length} {a.items} •{" "}
+                  <span className="font-medium text-foreground">
+                    RM{" "}
+                    {transactions
+                      .reduce((s, tx) => s + tx.amount, 0)
+                      .toFixed(2)}
+                  </span>
+                </p>
+
+                {transactions.length > SHOW_LIMIT && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setTxShowAll((v) => !v)}
+                  >
+                    {txShowAll ? (
+                      <>
+                        <ChevronUp className="h-4 w-4 mr-1" />
+                        {a.showLess}
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-1" />
+                        {a.showAll} ({transactions.length})
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{a.dateTime}</TableHead>
+                      <TableHead>{a.orderId}</TableHead>
+                      <TableHead>{a.items}</TableHead>
+                      <TableHead className="text-right">{a.amount}</TableHead>
+                      <TableHead className="text-right">{t.common.actions}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {(txShowAll ? transactions : transactions.slice(0, SHOW_LIMIT)).map(
+                      (tx) => (
+                        <TableRow key={tx.id}>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {new Date(tx.date).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">#{tx.id}</TableCell>
+                          <TableCell className="text-sm max-w-[220px] truncate">
+                            {tx.items}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            RM {tx.amount.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewReceipt(tx.id)}
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
+
+                            {onVoidOrder && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="text-red-600">
+                                    <XCircle className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>{a.voidOrder}</AlertDialogTitle>
+                                    <AlertDialogDescription>{a.voidOrderConfirm}</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => onVoidOrder(tx.id)}>
+                                      {a.voidOrder}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Expense History */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <PackageOpen className="h-5 w-5 text-orange-500" />
+                {a.expenseHistory}
+              </CardTitle>
+              <CardDescription>{a.expenseHistoryDesc}</CardDescription>
+            </div>
+
+            <YearMonthFilter
+              year={expYear}
+              month={expMonth}
+              years={yearOptions}
+              onYearChange={(v) => {
+                setExpYear(v);
+                setExpShowAll(false);
+              }}
+              onMonthChange={(v) => {
+                setExpMonth(v);
+                setExpShowAll(false);
+              }}
+            />
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {expenseHistory.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <PackageOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">{a.noExpenses}</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <span>
+                    <span className="text-muted-foreground">{a.entries} </span>
+                    <strong>{expenseHistory.length}</strong>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">{a.totalSpent} </span>
+                    <strong className="text-orange-600">
+                      RM {expenseHistoryTotal.toFixed(2)}
+                    </strong>
+                  </span>
+                </div>
+
+                {expenseHistory.length > SHOW_LIMIT && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExpShowAll((v) => !v)}
+                  >
+                    {expShowAll ? (
+                      <>
+                        <ChevronUp className="h-4 w-4 mr-1" />
+                        {a.showLess}
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-1" />
+                        {a.showAll} ({expenseHistory.length})
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t.common.date}</TableHead>
+                      <TableHead>{a.productMaterial}</TableHead>
+                      <TableHead>{t.common.quantity}</TableHead>
+                      <TableHead className="text-right">{a.costPerUnit}</TableHead>
+                      <TableHead className="text-right">{t.expenses.totalCost}</TableHead>
+                      <TableHead>{t.common.notes}</TableHead>
+                      <TableHead className="text-right">{t.common.actions}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {(expShowAll ? expenseHistory : expenseHistory.slice(0, SHOW_LIMIT)).map(
+                      (exp) => (
+                        <TableRow key={exp.id}>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {new Date(exp.date).toLocaleDateString()}{" "}
+                            <span className="text-muted-foreground text-xs">
+                              {new Date(exp.date).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium">{exp.productName}</span>
+                          </TableCell>
+                          <TableCell>
+                            {exp.quantity}{" "}
+                            <span className="text-muted-foreground text-xs">{exp.unit}</span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            RM {exp.costPerUnit.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge
+                              variant="secondary"
+                              className="font-mono bg-orange-100 text-orange-700 border-orange-200"
+                            >
+                              RM {exp.totalCost.toFixed(2)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[160px] truncate">
+                            {exp.notes || "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {onDeleteExpense && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>{a.deleteExpense}</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      <strong>{exp.productName}</strong> — RM {exp.totalCost.toFixed(2)}?{" "}
+                                      {a.deleteExpenseConfirm}
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-red-600 hover:bg-red-700"
+                                      onClick={() => onDeleteExpense(exp.id)}
+                                    >
+                                      {t.common.delete}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Top Selling Products */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle>{a.topProducts}</CardTitle>
+              <CardDescription>{a.topProductsDesc}</CardDescription>
+            </div>
+
+            <YearMonthFilter
+              year={topYear}
+              month={topMonth}
+              years={yearOptions}
+              onYearChange={setTopYear}
+              onMonthChange={setTopMonth}
+            />
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {topProducts.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Award className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">{a.noSalesData}</p>
+            </div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={topProducts}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" fontSize={12} angle={-45} textAnchor="end" height={80} />
+                  <YAxis />
+                  <Tooltip formatter={(v) => `RM ${Number(v).toFixed(2)}`} />
+                  <Bar key="bar-revenue" dataKey="revenue" fill="#0088FE" name={a.revenue} />
+                </BarChart>
+              </ResponsiveContainer>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Analytics receipt popup */}
+      <Dialog open={analyticsReceiptOpen} onOpenChange={setAnalyticsReceiptOpen}>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>{selectedProduct?.name}</DialogTitle>
-            <DialogDescription>
-              {t.orders.pricePerUnit} RM {selectedProduct?.price} /{" "}
-              {selectedProduct?.unit}
+            <DialogTitle className="sr-only">Analytics Receipt</DialogTitle>
+            <DialogDescription className="sr-only">
+              Print analytics summary (80mm)
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>{t.common.quantity}</Label>
-              <Input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={quantity}
-                onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
-              />
+          {/* Printable block */}
+          <div id="print-analytics" className="print-only space-y-3 font-mono text-sm">
+            <div className="text-center border-b-2 border-dashed pb-4">
+              <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
+              <p className="text-xs">ANALYTICS SUMMARY</p>
             </div>
 
-            <div className="grid gap-2">
-              <Label>{t.common.unit}</Label>
-              <Select
-                value={selectedUnit}
-                onValueChange={(value) => setSelectedUnit(value as UnitType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unit">{t.units.unit}</SelectItem>
-                  <SelectItem value="kg">{t.units.kg}</SelectItem>
-                  <SelectItem value="gram">{t.units.gram}</SelectItem>
-                  <SelectItem value="liter">{t.units.liter}</SelectItem>
-                  <SelectItem value="ml">{t.units.ml}</SelectItem>
-                  <SelectItem value="piece">{t.units.piece}</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-1 border-b border-dashed pb-3">
+              <div className="flex justify-between">
+                <span>Date:</span>
+                <span>{new Date().toLocaleDateString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Time:</span>
+                <span>{new Date().toLocaleTimeString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Period:</span>
+                <span className="font-bold">{periodLabel}</span>
+              </div>
             </div>
 
-            <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-              <span>{t.orders.totalLabel}</span>
-              <span className="text-xl font-medium">
-                RM {(quantity * (selectedProduct?.price || 0)).toFixed(2)}
-              </span>
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <span>Today Sales</span>
+                <span>RM {todaySales.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Sales</span>
+                <span>RM {totalSales.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Expenses</span>
+                <span>RM {totalCost.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between text-base font-bold border-t-2 border-dashed pt-2">
+                <span>Net Profit</span>
+                <span>RM {profit.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between text-xs pt-1">
+                <span>Profit Margin</span>
+                <span>{profitMargin.toFixed(1)}%</span>
+              </div>
+            </div>
+
+            <div className="text-center text-xs border-t border-dashed pt-3">
+              <p>— End —</p>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              {t.common.cancel}
+          {/* Close above Print (Print will immediately open print dialog) */}
+          <DialogFooter className="flex flex-col gap-2 sm:flex-col">
+            <Button
+              variant="outline"
+              onClick={() => setAnalyticsReceiptOpen(false)}
+              className="w-full"
+            >
+              {t.common.close}
             </Button>
-            <Button onClick={handleAddToCart}>{t.orders.addToCart}</Button>
+
+            <Button
+              onClick={() => {
+                printWithTarget("analytics"); // immediately opens print dialog
+                setAnalyticsReceiptOpen(false);
+              }}
+              className="w-full"
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              Print Summary
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Receipt Dialog (Close above Print, Print opens dialog immediately) */}
-      <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
-        <DialogContent className="max-w-md">
+      {/* Order receipt popup */}
+      <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle className="sr-only">Order Receipt</DialogTitle>
             <DialogDescription className="sr-only">
-              Official receipt for your order
+              Reprint official receipt
             </DialogDescription>
           </DialogHeader>
 
-          {lastOrder && (
-            <div className="space-y-4 font-mono text-sm">
+          {selectedOrder && (
+            <div id="print-receipt" className="print-only space-y-4 font-mono text-sm">
               <div className="text-center border-b-2 border-dashed pb-4">
                 <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
                 <p className="text-xs">{t.orders.officialReceipt}</p>
@@ -524,22 +910,22 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
               <div className="space-y-1 border-b border-dashed pb-3">
                 <div className="flex justify-between">
                   <span>{t.orders.receiptNo}:</span>
-                  <span className="font-bold">#{lastOrder.id}</span>
+                  <span className="font-bold">#{selectedOrder.id}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>{t.common.date}:</span>
-                  <span>{new Date(lastOrder.date).toLocaleDateString()}</span>
+                  <span>{new Date(selectedOrder.date).toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Time:</span>
-                  <span>{new Date(lastOrder.date).toLocaleTimeString()}</span>
+                  <span>{new Date(selectedOrder.date).toLocaleTimeString()}</span>
                 </div>
               </div>
 
               <div className="border-b-2 border-dashed pb-3">
                 <div className="font-bold mb-2">{t.orders.itemsLabel}</div>
-                {lastOrder.items.map((item, index) => (
-                  <div key={index} className="mb-3">
+                {selectedOrder.items.map((item, idx) => (
+                  <div key={idx} className="mb-3">
                     <div className="flex justify-between">
                       <span>{item.productName}</span>
                     </div>
@@ -556,23 +942,25 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span>{t.orders.subtotalLabel}</span>
-                  <span>RM {lastOrder.subtotal.toFixed(2)}</span>
+                  <span>RM {selectedOrder.subtotal.toFixed(2)}</span>
                 </div>
-                {lastOrder.discount > 0 && (
+
+                {selectedOrder.discount > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>
                       {t.orders.discount}{" "}
-                      {lastOrder.discountType === "percentage"
-                        ? `(${lastOrder.discount}%)`
+                      {selectedOrder.discountType === "percentage"
+                        ? `(${selectedOrder.discount}%)`
                         : t.orders.discountFixed}
                       :
                     </span>
-                    <span>- RM {lastOrder.discountAmount.toFixed(2)}</span>
+                    <span>- RM {selectedOrder.discountAmount.toFixed(2)}</span>
                   </div>
                 )}
+
                 <div className="flex justify-between text-base font-bold border-t-2 border-dashed pt-2">
                   <span>{t.orders.totalFinal}</span>
-                  <span>RM {lastOrder.total.toFixed(2)}</span>
+                  <span>RM {selectedOrder.total.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -584,22 +972,17 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
           )}
 
           <DialogFooter className="flex flex-col gap-2 sm:flex-col">
-            <Button
-              variant="outline"
-              onClick={() => setReceiptDialogOpen(false)}
-              className="w-full"
-            >
+            <Button variant="outline" onClick={() => setReceiptOpen(false)} className="w-full">
               {t.common.close}
             </Button>
-
             <Button
               onClick={() => {
-                printReceipt();
-                setReceiptDialogOpen(false);
+                printWithTarget("receipt"); // immediately opens print dialog
+                setReceiptOpen(false);
               }}
               className="w-full"
             >
-              <Receipt className="mr-2 h-4 w-4" />
+              <Printer className="mr-2 h-4 w-4" />
               {t.orders.printReceipt}
             </Button>
           </DialogFooter>
