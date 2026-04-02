@@ -530,15 +530,15 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
               </div>
             </div>
           )}
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setReceiptDialogOpen(false)} className="w-full">
-              {t.common.close}
-            </Button>
-            <Button onClick={printReceipt} className="w-full">
-              <Receipt className="mr-2 h-4 w-4" />
-              {t.orders.printReceipt}
-            </Button>
-          </DialogFooter>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-col">
+  <Button variant="outline" onClick={() => setReceiptOpen(false)} className="w-full">
+    {t.common.close}
+  </Button>
+  <Button onClick={printReceipt} className="w-full">
+    <Receipt className="mr-2 h-4 w-4" />
+    {t.orders.printReceipt}
+  </Button>
+</DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
