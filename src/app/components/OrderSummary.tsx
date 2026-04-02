@@ -30,6 +30,7 @@ import {
 } from "./ui/dialog";
 import { Label } from "./ui/label";
 import { useLanguage } from "../contexts/LanguageContext";
+import { printElementById } from "../../lib/print";
 
 interface OrderSummaryProps {
   products: Product[];
@@ -156,28 +157,8 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
   };
 
   const printReceipt = () => {
-    // Mobile browsers often snapshot the DOM asynchronously for printing.
-    // If we remove the print-target class immediately, the print preview can be blank.
-    document.body.classList.remove(
-      "print-target-analytics",
-      "print-target-receipt",
-    );
-    document.body.classList.add("print-target-receipt");
-
-    const cleanup = () => {
-      document.body.classList.remove("print-target-receipt");
-      window.removeEventListener("afterprint", cleanup);
-    };
-
-    window.addEventListener("afterprint", cleanup, { once: true });
-
-    // Force a style/layout flush so print CSS applies, but keep this synchronous
-    // so browsers still treat it as a user-initiated print.
-    document.body.getBoundingClientRect();
-    window.print();
-
-    // Fallback cleanup (some mobile browsers don't fire afterprint reliably)
-    setTimeout(cleanup, 1500);
+    // Use an isolated print iframe for better mobile/tablet compatibility.
+    void printElementById("print-receipt", "receipt");
   };
 
   return (
@@ -334,9 +315,7 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
                         <CardContent className="p-3">
                           <div className="flex justify-between items-start mb-2">
                             <div>
-                              <p className="font-medium text-sm">
-                                {item.productName}
-                              </p>
+                              <p className="font-medium text-sm">{item.productName}</p>
                               <p className="text-xs text-muted-foreground">
                                 RM {item.price.toFixed(2)} / {item.unit}
                               </p>
@@ -356,9 +335,7 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() =>
-                                  updateCartItemQuantity(index, -1)
-                                }
+                                onClick={() => updateCartItemQuantity(index, -1)}
                                 className="h-8 w-8 p-0"
                               >
                                 <Minus className="h-4 w-4" />
@@ -369,9 +346,7 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() =>
-                                  updateCartItemQuantity(index, 1)
-                                }
+                                onClick={() => updateCartItemQuantity(index, 1)}
                                 className="h-8 w-8 p-0"
                               >
                                 <Plus className="h-4 w-4" />
@@ -405,12 +380,8 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="percentage">
-                        {t.orders.percentage}
-                      </SelectItem>
-                      <SelectItem value="fixed">
-                        {t.orders.fixedAmount}
-                      </SelectItem>
+                      <SelectItem value="percentage">{t.orders.percentage}</SelectItem>
+                      <SelectItem value="fixed">{t.orders.fixedAmount}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -425,11 +396,7 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
                     id="discount"
                     type="number"
                     min="0"
-                    max={
-                      discountType === "percentage"
-                        ? "100"
-                        : getSubtotal().toString()
-                    }
+                    max={discountType === "percentage" ? "100" : getSubtotal().toString()}
                     step="0.01"
                     value={discount}
                     onChange={(e) => {
@@ -437,9 +404,7 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
                       if (discountType === "percentage") {
                         setDiscount(Math.min(100, Math.max(0, value)));
                       } else {
-                        setDiscount(
-                          Math.min(getSubtotal(), Math.max(0, value)),
-                        );
+                        setDiscount(Math.min(getSubtotal(), Math.max(0, value)));
                       }
                     }}
                     placeholder="0"
@@ -582,9 +547,7 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
                       <span>
                         {item.quantity} {item.unit} x RM {item.price.toFixed(2)}
                       </span>
-                      <span className="font-bold">
-                        RM {item.total.toFixed(2)}
-                      </span>
+                      <span className="font-bold">RM {item.total.toFixed(2)}</span>
                     </div>
                   </div>
                 ))}
