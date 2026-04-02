@@ -23,7 +23,7 @@ export const supabase = createClient(
 // The Edge Function code registers routes under:
 //   /make-server-51f3fb75/*
 // so SERVER must include the extra prefix segment.
-export const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-51f3fb75/make-server-51f3fb75`;
+export const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-51f3fb75`;
 
 // ── Admin email — change this to YOUR email address ───────────────────────────
 // This must exactly match the email you use to log in.
