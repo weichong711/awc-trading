@@ -1,31 +1,88 @@
 import { useState, useMemo } from "react";
 import {
-  TrendingUp, DollarSign, ShoppingBag, Award, Printer, XCircle,
-  Receipt, PackageOpen, ChevronDown, ChevronUp, Trash2,
+  TrendingUp,
+  DollarSign,
+  ShoppingBag,
+  Award,
+  Printer,
+  XCircle,
+  Receipt,
+  PackageOpen,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
 import { Badge } from "./ui/badge";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, LineChart, Line, Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  Legend,
 } from "recharts";
 import { Order, Expense } from "../types/business";
 import { Button } from "./ui/button";
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "./ui/dialog";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   AlertDialogTrigger,
 } from "./ui/alert-dialog";
 import { useLanguage } from "../contexts/LanguageContext";
 
 const MONTH_LABELS = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 interface ProfitAnalyticsProps {
@@ -35,93 +92,167 @@ interface ProfitAnalyticsProps {
   onDeleteExpense?: (id: string) => void;
 }
 
-export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense }: ProfitAnalyticsProps) {
+export function ProfitAnalytics({
+  orders,
+  expenses,
+  onVoidOrder,
+  onDeleteExpense,
+}: ProfitAnalyticsProps) {
   const { t } = useLanguage();
   const a = t.analytics;
 
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 4 + i);
 
-  const [selectedYear,  setSelectedYear]  = useState(currentYear.toString());
+  const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [selectedMonth, setSelectedMonth] = useState("all");
-  const [txYear,  setTxYear]  = useState(currentYear.toString());
+  const [txYear, setTxYear] = useState(currentYear.toString());
   const [txMonth, setTxMonth] = useState("all");
   const [txShowAll, setTxShowAll] = useState(false);
-  const [expYear,    setExpYear]    = useState(currentYear.toString());
-  const [expMonth,   setExpMonth]   = useState("all");
+  const [expYear, setExpYear] = useState(currentYear.toString());
+  const [expMonth, setExpMonth] = useState("all");
   const [expShowAll, setExpShowAll] = useState(false);
-  const [topYear,  setTopYear]  = useState(currentYear.toString());
+  const [topYear, setTopYear] = useState(currentYear.toString());
   const [topMonth, setTopMonth] = useState("all");
-  const [receiptOpen,   setReceiptOpen]   = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const matchDate = (date: Date, year: string, month: string) => {
     const d = new Date(date);
-    return d.getFullYear() === parseInt(year) && (month === "all" || d.getMonth() === parseInt(month));
+    return (
+      d.getFullYear() === parseInt(year) &&
+      (month === "all" || d.getMonth() === parseInt(month))
+    );
   };
 
-  const YearMonthFilter = ({ year, month, years, onYearChange, onMonthChange }: {
-    year: string; month: string; years: number[];
-    onYearChange: (v: string) => void; onMonthChange: (v: string) => void;
+  const YearMonthFilter = ({
+    year,
+    month,
+    years,
+    onYearChange,
+    onMonthChange,
+  }: {
+    year: string;
+    month: string;
+    years: number[];
+    onYearChange: (v: string) => void;
+    onMonthChange: (v: string) => void;
   }) => (
     <div className="flex gap-2">
       <Select value={year} onValueChange={onYearChange}>
-        <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
-        <SelectContent>{years.map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}</SelectContent>
+        <SelectTrigger className="w-[110px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {years.map((y) => (
+            <SelectItem key={y} value={y.toString()}>
+              {y}
+            </SelectItem>
+          ))}
+        </SelectContent>
       </Select>
+
       <Select value={month} onValueChange={onMonthChange}>
-        <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-[140px]">
+          <SelectValue />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Months</SelectItem>
-          {MONTH_LABELS.map((label, i) => <SelectItem key={i} value={i.toString()}>{label}</SelectItem>)}
+          {MONTH_LABELS.map((label, i) => (
+            <SelectItem key={i} value={i.toString()}>
+              {label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>
   );
 
   const today = new Date().toDateString();
-  const todayOrders = orders.filter(o => new Date(o.date).toDateString() === today && o.status === "completed");
-  const todaySales  = todayOrders.reduce((s, o) => s + o.total, 0);
+  const todayOrders = orders.filter(
+    (o) =>
+      new Date(o.date).toDateString() === today && o.status === "completed",
+  );
+  const todaySales = todayOrders.reduce((s, o) => s + o.total, 0);
 
-  const filteredOrders   = orders.filter(o => matchDate(o.date, selectedYear, selectedMonth) && o.status === "completed");
-  const filteredExpenses = expenses.filter(e => matchDate(e.date, selectedYear, selectedMonth));
+  const filteredOrders = orders.filter(
+    (o) =>
+      matchDate(o.date, selectedYear, selectedMonth) &&
+      o.status === "completed",
+  );
+  const filteredExpenses = expenses.filter((e) =>
+    matchDate(e.date, selectedYear, selectedMonth),
+  );
 
-  const totalSales   = filteredOrders.reduce((s, o) => s + o.total, 0);
-  const totalCost    = filteredExpenses.reduce((s, e) => s + e.totalCost, 0);
-  const profit       = totalSales - totalCost;
+  const totalSales = filteredOrders.reduce((s, o) => s + o.total, 0);
+  const totalCost = filteredExpenses.reduce((s, e) => s + e.totalCost, 0);
+  const profit = totalSales - totalCost;
   const profitMargin = totalSales > 0 ? (profit / totalSales) * 100 : 0;
 
-  const transactions = useMemo(() =>
-    orders
-      .filter(o => matchDate(o.date, txYear, txMonth) && o.status === "completed")
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .map(o => ({
-        id: o.id, date: o.date,
-        items: o.items.map(i => `${i.productName} (${i.quantity} ${i.unit})`).join(", "),
-        amount: o.total,
-      })),
-    [orders, txYear, txMonth]
+  const transactions = useMemo(
+    () =>
+      orders
+        .filter(
+          (o) =>
+            matchDate(o.date, txYear, txMonth) && o.status === "completed",
+        )
+        .sort(
+          (a1, b1) =>
+            new Date(b1.date).getTime() - new Date(a1.date).getTime(),
+        )
+        .map((o) => ({
+          id: o.id,
+          date: o.date,
+          items: o.items
+            .map((i) => `${i.productName} (${i.quantity} ${i.unit})`)
+            .join(", "),
+          amount: o.total,
+        })),
+    [orders, txYear, txMonth],
   );
 
-  const expenseHistory = useMemo(() =>
-    expenses
-      .filter(e => matchDate(e.date, expYear, expMonth))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [expenses, expYear, expMonth]
+  const expenseHistory = useMemo(
+    () =>
+      expenses
+        .filter((e) => matchDate(e.date, expYear, expMonth))
+        .sort(
+          (a1, b1) =>
+            new Date(b1.date).getTime() - new Date(a1.date).getTime(),
+        ),
+    [expenses, expYear, expMonth],
   );
-  const expenseHistoryTotal = expenseHistory.reduce((s, e) => s + e.totalCost, 0);
+  const expenseHistoryTotal = expenseHistory.reduce(
+    (s, e) => s + e.totalCost,
+    0,
+  );
 
   const topProducts = useMemo(() => {
     const map = new Map<string, { quantity: number; revenue: number }>();
     orders
-      .filter(o => matchDate(o.date, topYear, topMonth) && o.status === "completed")
-      .forEach(o => o.items.forEach(item => {
-        const ex = map.get(item.productName) || { quantity: 0, revenue: 0 };
-        map.set(item.productName, { quantity: ex.quantity + item.quantity, revenue: ex.revenue + item.total });
-      }));
+      .filter(
+        (o) =>
+          matchDate(o.date, topYear, topMonth) && o.status === "completed",
+      )
+      .forEach((o) =>
+        o.items.forEach((item) => {
+          const ex = map.get(item.productName) || {
+            quantity: 0,
+            revenue: 0,
+          };
+          map.set(item.productName, {
+            quantity: ex.quantity + item.quantity,
+            revenue: ex.revenue + item.total,
+          });
+        }),
+      );
+
     return Array.from(map.entries())
-      .map(([name, stats], i) => ({ productKey: `${topYear}-${topMonth}-${name}-${i}`, name, ...stats }))
-      .sort((a, b) => b.revenue - a.revenue)
+      .map(([name, stats], i) => ({
+        productKey: `${topYear}-${topMonth}-${name}-${i}`,
+        name,
+        ...stats,
+      }))
+      .sort((a1, b1) => b1.revenue - a1.revenue)
       .slice(0, 10);
   }, [orders, topYear, topMonth]);
 
@@ -129,37 +260,132 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
     const data = Array.from({ length: 12 }, (_, i) => ({
       monthKey: `${selectedYear}-${i}`,
       month: MONTH_LABELS[i].substring(0, 3),
-      sales: 0, cost: 0, profit: 0,
+      sales: 0,
+      cost: 0,
+      profit: 0,
     }));
-    orders.forEach(o => {
+
+    orders.forEach((o) => {
       const d = new Date(o.date);
-      if (d.getFullYear() === parseInt(selectedYear) && o.status === "completed")
+      if (
+        d.getFullYear() === parseInt(selectedYear) &&
+        o.status === "completed"
+      ) {
         data[d.getMonth()].sales += o.total;
+      }
     });
-    expenses.forEach(e => {
+
+    expenses.forEach((e) => {
       const d = new Date(e.date);
-      if (d.getFullYear() === parseInt(selectedYear))
+      if (d.getFullYear() === parseInt(selectedYear)) {
         data[d.getMonth()].cost += e.totalCost;
+      }
     });
-    data.forEach(d => { d.profit = d.sales - d.cost; });
+
+    data.forEach((d) => {
+      d.profit = d.sales - d.cost;
+    });
     return data;
   }, [selectedYear, orders, expenses]);
 
   const handleViewReceipt = (orderId: string) => {
-    const o = orders.find(o => o.id === orderId);
-    if (o) { setSelectedOrder(o); setReceiptOpen(true); }
+    const o = orders.find((x) => x.id === orderId);
+    if (o) {
+      setSelectedOrder(o);
+      setReceiptOpen(true);
+    }
   };
+
+  const printWithTarget = (target: "receipt" | "analytics") => {
+    document.body.classList.remove(
+      "print-target-receipt",
+      "print-target-analytics",
+    );
+    document.body.classList.add(
+      target === "receipt"
+        ? "print-target-receipt"
+        : "print-target-analytics",
+    );
+    window.print();
+    document.body.classList.remove(
+      "print-target-receipt",
+      "print-target-analytics",
+    );
+  };
+
+  const periodLabel = (() => {
+    if (selectedMonth === "all") return `${selectedYear} (All Months)`;
+    const m = Number(selectedMonth);
+    const label = MONTH_LABELS[m] || selectedMonth;
+    return `${selectedYear} (${label})`;
+  })();
 
   const SHOW_LIMIT = 20;
 
   return (
     <div className="space-y-6">
+      {/* Hidden print: analytics summary (80mm) */}
+      <div id="print-analytics" className="print-only space-y-3 font-mono text-sm">
+        <div className="text-center border-b-2 border-dashed border-black pb-4 mb-2">
+          <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
+          <p className="text-xs">Analytics Summary</p>
+          <p className="text-xs">{new Date().toLocaleString()}</p>
+        </div>
+
+        <div className="space-y-1 border-b border-dashed pb-3">
+          <div className="flex justify-between">
+            <span>Period</span>
+            <span className="font-bold">{periodLabel}</span>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex justify-between">
+            <span>Today Sales</span>
+            <span>RM {todaySales.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Total Sales</span>
+            <span>RM {totalSales.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Total Expenses</span>
+            <span>RM {totalCost.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between font-bold border-t-2 border-dashed pt-2">
+            <span>Net Profit</span>
+            <span>RM {profit.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-xs pt-1">
+            <span>Profit Margin</span>
+            <span>{profitMargin.toFixed(1)}%</span>
+          </div>
+        </div>
+
+        <div className="text-center text-xs border-t border-dashed pt-3">
+          <p>— End of Summary —</p>
+        </div>
+      </div>
 
       {/* Filter row */}
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm font-medium text-muted-foreground">{a.showingFor}</span>
-        <YearMonthFilter year={selectedYear} month={selectedMonth} years={yearOptions}
-          onYearChange={setSelectedYear} onMonthChange={setSelectedMonth} />
+        <span className="text-sm font-medium text-muted-foreground">
+          {a.showingFor}
+        </span>
+        <YearMonthFilter
+          year={selectedYear}
+          month={selectedMonth}
+          years={yearOptions}
+          onYearChange={setSelectedYear}
+          onMonthChange={setSelectedMonth}
+        />
+
+        <div className="ml-auto">
+          <Button variant="outline" onClick={() => printWithTarget("analytics")}>
+            <Printer className="mr-2 h-4 w-4" />
+            Print Summary
+          </Button>
+        </div>
       </div>
 
       {/* Stat Cards */}
@@ -171,9 +397,12 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
           </CardHeader>
           <CardContent>
             <div className="text-2xl">RM {todaySales.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">{todayOrders.length} {a.ordersToday}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {todayOrders.length} {a.ordersToday}
+            </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">{a.totalSales}</CardTitle>
@@ -181,9 +410,12 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
           </CardHeader>
           <CardContent>
             <div className="text-2xl">RM {totalSales.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">{filteredOrders.length} {a.completedOrders}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {filteredOrders.length} {a.completedOrders}
+            </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">{a.totalExpenses}</CardTitle>
@@ -191,19 +423,32 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
           </CardHeader>
           <CardContent>
             <div className="text-2xl">RM {totalCost.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">{filteredExpenses.length} {a.expenseEntries}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {filteredExpenses.length} {a.expenseEntries}
+            </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">{a.netProfit}</CardTitle>
-            <TrendingUp className={`h-4 w-4 ${profit >= 0 ? "text-green-600" : "text-red-500"}`} />
+            <TrendingUp
+              className={`h-4 w-4 ${
+                profit >= 0 ? "text-green-600" : "text-red-500"
+              }`}
+            />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <div
+              className={`text-2xl ${
+                profit >= 0 ? "text-green-600" : "text-red-600"
+              }`}
+            >
               RM {profit.toFixed(2)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">{profitMargin.toFixed(1)}% {a.margin}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {profitMargin.toFixed(1)}% {a.margin}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -217,8 +462,16 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
               <CardDescription>{a.monthlyDesc}</CardDescription>
             </div>
             <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
-              <SelectContent>{yearOptions.map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((y) => (
+                  <SelectItem key={y} value={y.toString()}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
         </CardHeader>
@@ -230,9 +483,30 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
               <YAxis />
               <Tooltip formatter={(v) => `RM ${Number(v).toFixed(2)}`} />
               <Legend />
-              <Line key="line-sales"  type="monotone" dataKey="sales"  stroke="#0088FE" name={a.totalSales}    strokeWidth={2} />
-              <Line key="line-cost"   type="monotone" dataKey="cost"   stroke="#FF8042" name={a.totalExpenses} strokeWidth={2} />
-              <Line key="line-profit" type="monotone" dataKey="profit" stroke="#00C49F" name={a.netProfit}     strokeWidth={2} />
+              <Line
+                key="line-sales"
+                type="monotone"
+                dataKey="sales"
+                stroke="#0088FE"
+                name={a.totalSales}
+                strokeWidth={2}
+              />
+              <Line
+                key="line-cost"
+                type="monotone"
+                dataKey="cost"
+                stroke="#FF8042"
+                name={a.totalExpenses}
+                strokeWidth={2}
+              />
+              <Line
+                key="line-profit"
+                type="monotone"
+                dataKey="profit"
+                stroke="#00C49F"
+                name={a.netProfit}
+                strokeWidth={2}
+              />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
@@ -244,13 +518,24 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <ShoppingBag className="h-5 w-5 text-primary" />{a.transactionHistory}
+                <ShoppingBag className="h-5 w-5 text-primary" />
+                {a.transactionHistory}
               </CardTitle>
               <CardDescription>{a.transactionDesc}</CardDescription>
             </div>
-            <YearMonthFilter year={txYear} month={txMonth} years={yearOptions}
-              onYearChange={v => { setTxYear(v); setTxShowAll(false); }}
-              onMonthChange={v => { setTxMonth(v); setTxShowAll(false); }} />
+            <YearMonthFilter
+              year={txYear}
+              month={txMonth}
+              years={yearOptions}
+              onYearChange={(v) => {
+                setTxYear(v);
+                setTxShowAll(false);
+              }}
+              onMonthChange={(v) => {
+                setTxMonth(v);
+                setTxShowAll(false);
+              }}
+            />
           </div>
         </CardHeader>
         <CardContent>
@@ -264,14 +549,34 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm text-muted-foreground">
                   {transactions.length} {a.items} •{" "}
-                  <span className="font-medium text-foreground">RM {transactions.reduce((s, tx) => s + tx.amount, 0).toFixed(2)}</span>
+                  <span className="font-medium text-foreground">
+                    RM{" "}
+                    {transactions
+                      .reduce((s, tx) => s + tx.amount, 0)
+                      .toFixed(2)}
+                  </span>
                 </p>
                 {transactions.length > SHOW_LIMIT && (
-                  <Button variant="ghost" size="sm" onClick={() => setTxShowAll(v => !v)}>
-                    {txShowAll ? <><ChevronUp className="h-4 w-4 mr-1" />{a.showLess}</> : <><ChevronDown className="h-4 w-4 mr-1" />{a.showAll} ({transactions.length})</>}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setTxShowAll((v) => !v)}
+                  >
+                    {txShowAll ? (
+                      <>
+                        <ChevronUp className="h-4 w-4 mr-1" />
+                        {a.showLess}
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-1" />
+                        {a.showAll} ({transactions.length})
+                      </>
+                    )}
                   </Button>
                 )}
               </div>
+
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -280,46 +585,81 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
                       <TableHead>{a.orderId}</TableHead>
                       <TableHead>{a.items}</TableHead>
                       <TableHead className="text-right">{a.amount}</TableHead>
-                      <TableHead className="text-right">{t.common.actions}</TableHead>
+                      <TableHead className="text-right">
+                        {t.common.actions}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(txShowAll ? transactions : transactions.slice(0, SHOW_LIMIT)).map(tx => (
-                      <TableRow key={tx.id}>
-                        <TableCell className="text-sm whitespace-nowrap">{new Date(tx.date).toLocaleString()}</TableCell>
-                        <TableCell className="font-mono text-sm">#{tx.id}</TableCell>
-                        <TableCell className="text-sm max-w-[220px] truncate">{tx.items}</TableCell>
-                        <TableCell className="text-right font-medium">RM {tx.amount.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" onClick={() => handleViewReceipt(tx.id)}>
-                            <Printer className="h-4 w-4" />
-                          </Button>
-                          {onVoidOrder && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm" className="text-red-600"><XCircle className="h-4 w-4" /></Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>{a.voidOrder}</AlertDialogTitle>
-                                  <AlertDialogDescription>{a.voidOrderConfirm}</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => onVoidOrder(tx.id)}>{a.voidOrder}</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {(txShowAll ? transactions : transactions.slice(0, SHOW_LIMIT)).map(
+                      (tx) => (
+                        <TableRow key={tx.id}>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {new Date(tx.date).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            #{tx.id}
+                          </TableCell>
+                          <TableCell className="text-sm max-w-[220px] truncate">
+                            {tx.items}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            RM {tx.amount.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewReceipt(tx.id)}
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
+
+                            {onVoidOrder && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-600"
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>{a.voidOrder}</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      {a.voidOrderConfirm}
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>
+                                      {t.common.cancel}
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => onVoidOrder(tx.id)}
+                                    >
+                                      {a.voidOrder}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )}
                   </TableBody>
                 </Table>
               </div>
+
               {!txShowAll && transactions.length > SHOW_LIMIT && (
                 <p className="text-center text-xs text-muted-foreground mt-3">
-                  {a.showing} {SHOW_LIMIT} {a.of} {transactions.length} — <button className="underline" onClick={() => setTxShowAll(true)}>{a.showAll}</button>
+                  {a.showing} {SHOW_LIMIT} {a.of} {transactions.length} —{" "}
+                  <button className="underline" onClick={() => setTxShowAll(true)}>
+                    {a.showAll}
+                  </button>
                 </p>
               )}
             </>
@@ -333,15 +673,27 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <PackageOpen className="h-5 w-5 text-orange-500" />{a.expenseHistory}
+                <PackageOpen className="h-5 w-5 text-orange-500" />
+                {a.expenseHistory}
               </CardTitle>
               <CardDescription>{a.expenseHistoryDesc}</CardDescription>
             </div>
-            <YearMonthFilter year={expYear} month={expMonth} years={yearOptions}
-              onYearChange={v => { setExpYear(v); setExpShowAll(false); }}
-              onMonthChange={v => { setExpMonth(v); setExpShowAll(false); }} />
+            <YearMonthFilter
+              year={expYear}
+              month={expMonth}
+              years={yearOptions}
+              onYearChange={(v) => {
+                setExpYear(v);
+                setExpShowAll(false);
+              }}
+              onMonthChange={(v) => {
+                setExpMonth(v);
+                setExpShowAll(false);
+              }}
+            />
           </div>
         </CardHeader>
+
         <CardContent>
           {expenseHistory.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -352,15 +704,39 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
             <>
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                 <div className="flex flex-wrap gap-4 text-sm">
-                  <span><span className="text-muted-foreground">{a.entries} </span><strong>{expenseHistory.length}</strong></span>
-                  <span><span className="text-muted-foreground">{a.totalSpent} </span><strong className="text-orange-600">RM {expenseHistoryTotal.toFixed(2)}</strong></span>
+                  <span>
+                    <span className="text-muted-foreground">{a.entries} </span>
+                    <strong>{expenseHistory.length}</strong>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">{a.totalSpent} </span>
+                    <strong className="text-orange-600">
+                      RM {expenseHistoryTotal.toFixed(2)}
+                    </strong>
+                  </span>
                 </div>
+
                 {expenseHistory.length > SHOW_LIMIT && (
-                  <Button variant="ghost" size="sm" onClick={() => setExpShowAll(v => !v)}>
-                    {expShowAll ? <><ChevronUp className="h-4 w-4 mr-1" />{a.showLess}</> : <><ChevronDown className="h-4 w-4 mr-1" />{a.showAll} ({expenseHistory.length})</>}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExpShowAll((v) => !v)}
+                  >
+                    {expShowAll ? (
+                      <>
+                        <ChevronUp className="h-4 w-4 mr-1" />
+                        {a.showLess}
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-1" />
+                        {a.showAll} ({expenseHistory.length})
+                      </>
+                    )}
                   </Button>
                 )}
               </div>
+
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -374,57 +750,94 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
                       <TableHead className="text-right">{t.common.actions}</TableHead>
                     </TableRow>
                   </TableHeader>
+
                   <TableBody>
-                    {(expShowAll ? expenseHistory : expenseHistory.slice(0, SHOW_LIMIT)).map(exp => (
-                      <TableRow key={exp.id}>
-                        <TableCell className="text-sm whitespace-nowrap">
-                          {new Date(exp.date).toLocaleDateString()}{" "}
-                          <span className="text-muted-foreground text-xs">
-                            {new Date(exp.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        </TableCell>
-                        <TableCell><span className="font-medium">{exp.productName}</span></TableCell>
-                        <TableCell>{exp.quantity} <span className="text-muted-foreground text-xs">{exp.unit}</span></TableCell>
-                        <TableCell className="text-right">RM {exp.costPerUnit.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="secondary" className="font-mono bg-orange-100 text-orange-700 border-orange-200">
-                            RM {exp.totalCost.toFixed(2)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[160px] truncate">{exp.notes || "—"}</TableCell>
-                        <TableCell className="text-right">
-                          {onDeleteExpense && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>{a.deleteExpense}</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    <strong>{exp.productName}</strong> — RM {exp.totalCost.toFixed(2)}? {a.deleteExpenseConfirm}
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-                                  <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => onDeleteExpense(exp.id)}>
-                                    {t.common.delete}
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {(expShowAll ? expenseHistory : expenseHistory.slice(0, SHOW_LIMIT)).map(
+                      (exp) => (
+                        <TableRow key={exp.id}>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {new Date(exp.date).toLocaleDateString()}{" "}
+                            <span className="text-muted-foreground text-xs">
+                              {new Date(exp.date).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium">{exp.productName}</span>
+                          </TableCell>
+                          <TableCell>
+                            {exp.quantity}{" "}
+                            <span className="text-muted-foreground text-xs">
+                              {exp.unit}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            RM {exp.costPerUnit.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge
+                              variant="secondary"
+                              className="font-mono bg-orange-100 text-orange-700 border-orange-200"
+                            >
+                              RM {exp.totalCost.toFixed(2)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[160px] truncate">
+                            {exp.notes || "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {onDeleteExpense && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>
+                                      {a.deleteExpense}
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      <strong>{exp.productName}</strong> — RM{" "}
+                                      {exp.totalCost.toFixed(2)}?{" "}
+                                      {a.deleteExpenseConfirm}
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>
+                                      {t.common.cancel}
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-red-600 hover:bg-red-700"
+                                      onClick={() => onDeleteExpense(exp.id)}
+                                    >
+                                      {t.common.delete}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )}
                   </TableBody>
                 </Table>
               </div>
+
               {!expShowAll && expenseHistory.length > SHOW_LIMIT && (
                 <p className="text-center text-xs text-muted-foreground mt-3">
-                  {a.showing} {SHOW_LIMIT} {a.of} {expenseHistory.length} — <button className="underline" onClick={() => setExpShowAll(true)}>{a.showAll}</button>
+                  {a.showing} {SHOW_LIMIT} {a.of} {expenseHistory.length} —{" "}
+                  <button className="underline" onClick={() => setExpShowAll(true)}>
+                    {a.showAll}
+                  </button>
                 </p>
               )}
             </>
@@ -440,10 +853,16 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
               <CardTitle>{a.topProducts}</CardTitle>
               <CardDescription>{a.topProductsDesc}</CardDescription>
             </div>
-            <YearMonthFilter year={topYear} month={topMonth} years={yearOptions}
-              onYearChange={setTopYear} onMonthChange={setTopMonth} />
+            <YearMonthFilter
+              year={topYear}
+              month={topMonth}
+              years={yearOptions}
+              onYearChange={setTopYear}
+              onMonthChange={setTopMonth}
+            />
           </div>
         </CardHeader>
+
         <CardContent>
           {topProducts.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -455,12 +874,19 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={topProducts}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" fontSize={12} angle={-45} textAnchor="end" height={80} />
+                  <XAxis
+                    dataKey="name"
+                    fontSize={12}
+                    angle={-45}
+                    textAnchor="end"
+                    height={80}
+                  />
                   <YAxis />
                   <Tooltip formatter={(v) => `RM ${Number(v).toFixed(2)}`} />
                   <Bar key="bar-revenue" dataKey="revenue" fill="#0088FE" name={a.revenue} />
                 </BarChart>
               </ResponsiveContainer>
+
               <div className="mt-6 border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -476,12 +902,15 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
                       <TableRow key={p.productKey}>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            {i < 3 && <Award className="h-4 w-4 text-amber-500" />}{i + 1}
+                            {i < 3 && <Award className="h-4 w-4 text-amber-500" />}
+                            {i + 1}
                           </div>
                         </TableCell>
                         <TableCell className="font-medium">{p.name}</TableCell>
                         <TableCell className="text-right">{p.quantity.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-medium">RM {p.revenue.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-medium">
+                          RM {p.revenue.toFixed(2)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -497,53 +926,92 @@ export function ProfitAnalytics({ orders, expenses, onVoidOrder, onDeleteExpense
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle className="sr-only">Order Receipt</DialogTitle>
-            <DialogDescription className="sr-only">Reprint official receipt</DialogDescription>
+            <DialogDescription className="sr-only">
+              Reprint official receipt
+            </DialogDescription>
           </DialogHeader>
+
           {selectedOrder && (
-            <div className="space-y-4 font-mono text-sm receipt-content">
+            <div
+              id="print-receipt"
+              className="print-only space-y-4 font-mono text-sm"
+            >
               <div className="text-center border-b-2 border-dashed pb-4">
                 <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
                 <p className="text-xs">{t.orders.officialReceipt}</p>
               </div>
+
               <div className="space-y-1 border-b border-dashed pb-3">
-                <div className="flex justify-between"><span>{t.orders.receiptNo}:</span><span className="font-bold">#{selectedOrder.id}</span></div>
-                <div className="flex justify-between"><span>{t.common.date}:</span><span>{new Date(selectedOrder.date).toLocaleDateString()}</span></div>
-                <div className="flex justify-between"><span>Time:</span><span>{new Date(selectedOrder.date).toLocaleTimeString()}</span></div>
+                <div className="flex justify-between">
+                  <span>{t.orders.receiptNo}:</span>
+                  <span className="font-bold">#{selectedOrder.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>{t.common.date}:</span>
+                  <span>{new Date(selectedOrder.date).toLocaleDateString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Time:</span>
+                  <span>{new Date(selectedOrder.date).toLocaleTimeString()}</span>
+                </div>
               </div>
+
               <div className="border-b-2 border-dashed pb-3">
                 <div className="font-bold mb-2">{t.orders.itemsLabel}</div>
                 {selectedOrder.items.map((item, idx) => (
                   <div key={idx} className="mb-3">
-                    <div className="flex justify-between"><span>{item.productName}</span></div>
+                    <div className="flex justify-between">
+                      <span>{item.productName}</span>
+                    </div>
                     <div className="flex justify-between text-xs pl-2">
-                      <span>{item.quantity} {item.unit} x RM {item.price.toFixed(2)}</span>
+                      <span>
+                        {item.quantity} {item.unit} x RM {item.price.toFixed(2)}
+                      </span>
                       <span className="font-bold">RM {item.total.toFixed(2)}</span>
                     </div>
                   </div>
                 ))}
               </div>
+
               <div className="space-y-2">
-                <div className="flex justify-between"><span>{t.orders.subtotalLabel}</span><span>RM {selectedOrder.subtotal.toFixed(2)}</span></div>
+                <div className="flex justify-between">
+                  <span>{t.orders.subtotalLabel}</span>
+                  <span>RM {selectedOrder.subtotal.toFixed(2)}</span>
+                </div>
+
                 {selectedOrder.discount > 0 && (
                   <div className="flex justify-between text-green-600">
-                    <span>{t.orders.discount} {selectedOrder.discountType === "percentage" ? `(${selectedOrder.discount}%)` : t.orders.discountFixed}:</span>
+                    <span>
+                      {t.orders.discount}{" "}
+                      {selectedOrder.discountType === "percentage"
+                        ? `(${selectedOrder.discount}%)`
+                        : t.orders.discountFixed}
+                      :
+                    </span>
                     <span>- RM {selectedOrder.discountAmount.toFixed(2)}</span>
                   </div>
                 )}
+
                 <div className="flex justify-between text-base font-bold border-t-2 border-dashed pt-2">
-                  <span>{t.orders.totalFinal}</span><span>RM {selectedOrder.total.toFixed(2)}</span>
+                  <span>{t.orders.totalFinal}</span>
+                  <span>RM {selectedOrder.total.toFixed(2)}</span>
                 </div>
               </div>
+
               <div className="text-center text-xs border-t border-dashed pt-3">
                 <p>{t.orders.thankYou}</p>
                 <p className="mt-1">{t.orders.comeAgain}</p>
               </div>
             </div>
           )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReceiptOpen(false)}>{t.common.close}</Button>
-            <Button onClick={() => window.print()}>
-              <Printer className="mr-2 h-4 w-4" />{t.orders.printReceipt}
+            <Button variant="outline" onClick={() => setReceiptOpen(false)}>
+              {t.common.close}
+            </Button>
+            <Button onClick={() => printWithTarget("receipt")}>
+              <Printer className="mr-2 h-4 w-4" />
+              {t.orders.printReceipt}
             </Button>
           </DialogFooter>
         </DialogContent>
