@@ -5,8 +5,16 @@
 }
 
 @media print {
+  /* Hide everything */
   * { visibility: hidden !important; }
 
+  /* Fallback: if no target class is set, print receipt */
+  #print-receipt,
+  #print-receipt * {
+    visibility: visible !important;
+  }
+
+  /* If app sets explicit target, use it */
   body.print-target-receipt #print-receipt,
   body.print-target-receipt #print-receipt * {
     visibility: visible !important;
@@ -17,6 +25,7 @@
     visibility: visible !important;
   }
 
+  /* 80mm receipt page */
   html, body {
     margin: 0 !important;
     padding: 0 !important;
@@ -27,6 +36,7 @@
 
   @page { size: 80mm auto; margin: 0; }
 
+  /* Print container style (both) */
   #print-receipt,
   #print-analytics {
     display: block !important;
