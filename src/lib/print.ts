@@ -45,7 +45,12 @@ function printMainWindow(target: PrintTarget) {
 
   document.body.getBoundingClientRect();
   window.focus();
-  window.print();
+  // Mobile Chrome often opens print before layout/paint catches up; defer one–two frames.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.print();
+    });
+  });
 }
 
 /**
