@@ -3,6 +3,43 @@ import printFrameCss from "../styles/print-frame.css?raw";
 
 export type PrintTarget = "receipt" | "analytics";
 
+function buildPrintHtml(title: string, bodyHtml: string) {
+  // Use an inline script so the new window/iframe prints ONLY after layout.
+  // Some mobile browsers show a blank tab if `print()` is called too early.
+  const script = `
+    (function () {
+      function doPrint() {
+        try {
+          window.focus();
+        } catch {}
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            try {
+              window.print();
+            } catch {}
+          });
+        });
+      }
+      if (document.readyState === "complete") doPrint();
+      else window.addEventListener("load", doPrint, { once: true });
+    })();
+  `;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=80mm, initial-scale=1"/>
+<title>${title}</title>
+<style>${printFrameCss}</style>
+</head>
+<body>
+<div class="receipt-root">${bodyHtml}</div>
+<script>${script}<\/script>
+</body>
+</html>`;
+}
+
 /**
  * Print a DOM node by id inside a **minimal iframe** that contains only:
  * - Embedded 80mm receipt CSS (no main-app Tailwind)
@@ -24,18 +61,7 @@ export function printElementById(id: string, target: PrintTarget) {
   clone.removeAttribute("hidden");
 
   const title = target === "receipt" ? "Receipt" : "Analytics summary";
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=80mm, initial-scale=1"/>
-<title>${title}</title>
-<style>${printFrameCss}</style>
-</head>
-<body>
-<div class="receipt-root">${clone.outerHTML}</div>
-</body>
-</html>`;
+  const html = buildPrintHtml(title, clone.outerHTML);
 
   // Prefer a new window/tab for mobile printing: many Android browsers ignore iframe-print
   // and end up printing the whole SPA (background UI included).
@@ -51,14 +77,7 @@ export function printElementById(id: string, target: PrintTarget) {
         w.close();
       };
       w.addEventListener("afterprint", cleanup, { once: true });
-
-      // Give the new document time to layout before printing.
-      w.focus();
-      w.requestAnimationFrame(() => {
-        w.requestAnimationFrame(() => {
-          w.print();
-        });
-      });
+      // Printing is triggered inside the child document after load/layout.
       return;
     } catch {
       // If anything fails (or popup is restricted), fall back to iframe.
@@ -102,11 +121,5 @@ export function printElementById(id: string, target: PrintTarget) {
   window.setTimeout(() => {
     if (iframe.parentNode) iframe.remove();
   }, 8000);
-
-  frameWin.focus();
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      frameWin.print();
-    });
-  });
+  // Printing is triggered inside the iframe document after load/layout.
 }
