@@ -19,7 +19,14 @@ import {
   SelectValue,
 } from "./ui/select";
 import { ScrollArea } from "./ui/scroll-area";
-import { Product, OrderItem, Order, UnitType } from "../types/business";
+import {
+  Product,
+  OrderItem,
+  Order,
+  UnitType,
+  ReceiptBusinessProfile,
+} from "../types/business";
+import { ReceiptMerchantHeader } from "./ReceiptMerchantHeader";
 import {
   Dialog,
   DialogContent,
@@ -35,9 +42,14 @@ import { printElementById } from "../../lib/print";
 interface OrderSummaryProps {
   products: Product[];
   onPlaceOrder: (order: Omit<Order, "id">) => void;
+  businessProfile: ReceiptBusinessProfile;
 }
 
-export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
+export function OrderSummary({
+  products,
+  onPlaceOrder,
+  businessProfile,
+}: OrderSummaryProps) {
   const { t } = useLanguage();
 
   const [cart, setCart] = useState<OrderItem[]>([]);
@@ -166,11 +178,7 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
       {/* Hidden printable receipt (80mm) */}
       {lastOrder && (
         <div id="print-receipt" className="space-y-4 font-mono text-sm">
-          {/* Header */}
-          <div className="text-center border-b-2 border-dashed border-black pb-4">
-            <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
-            <p className="text-xs">{t.orders.officialReceipt}</p>
-          </div>
+          <ReceiptMerchantHeader profile={businessProfile} />
 
           {/* Order Info */}
           <div className="space-y-1 border-b border-dashed border-black pb-3">
@@ -516,10 +524,7 @@ export function OrderSummary({ products, onPlaceOrder }: OrderSummaryProps) {
 
           {lastOrder && (
             <div className="space-y-4 font-mono text-sm">
-              <div className="text-center border-b-2 border-dashed pb-4">
-                <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
-                <p className="text-xs">{t.orders.officialReceipt}</p>
-              </div>
+              <ReceiptMerchantHeader profile={businessProfile} />
 
               <div className="space-y-1 border-b border-dashed pb-3">
                 <div className="flex justify-between">
