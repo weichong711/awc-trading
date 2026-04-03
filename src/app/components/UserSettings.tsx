@@ -1,6 +1,15 @@
 import { useState } from "react";
 import {
-  User, LogOut, Download, Upload, Building2, Mail, Lock, CreditCard, Shield, Globe,
+  User,
+  LogOut,
+  Download,
+  Upload,
+  Building2,
+  Mail,
+  Lock,
+  Shield,
+  Globe,
+  Phone,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -11,14 +20,23 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "./ui/alert-dialog";
-import { SubscriptionBilling } from "./SubscriptionBilling";
 import { AdminPanel } from "./AdminPanel";
 import { ADMIN_EMAIL } from "../../lib/supabase";
 import { useLanguage, Language } from "../contexts/LanguageContext";
 
 interface UserSettingsProps {
-  currentUser: { username: string; email: string; businessName: string };
-  onUpdateUser: (user: { username: string; email: string; businessName: string }) => void;
+  currentUser: {
+    username: string;
+    email: string;
+    businessName: string;
+    phoneNumber: string;
+  };
+  onUpdateUser: (user: {
+    username: string;
+    email: string;
+    businessName: string;
+    phoneNumber: string;
+  }) => void | Promise<void>;
   onLogout: () => void;
   onExportData: () => void;
   onImportData: (data: string) => void;
@@ -56,7 +74,7 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
   return (
     <div className="space-y-6 max-w-4xl">
       <Tabs value={settingsTab} onValueChange={setSettingsTab}>
-        <TabsList className={`grid w-full mb-6 ${isAdmin ? "grid-cols-3" : "grid-cols-2"}`}>
+        <TabsList className={`grid w-full mb-6 ${isAdmin ? "grid-cols-2" : "grid-cols-1"}`}>
           {isAdmin && (
             <TabsTrigger value="admin" className="flex items-center gap-2">
               <Shield className="h-4 w-4" />{t.settings.adminPanel}
@@ -64,9 +82,6 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
           )}
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <User className="h-4 w-4" />{t.settings.accountSettings}
-          </TabsTrigger>
-          <TabsTrigger value="billing" className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4" />{t.settings.subscriptionBilling}
           </TabsTrigger>
         </TabsList>
 
@@ -136,6 +151,22 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
                 <div className="flex gap-2">
                   <Mail className="h-5 w-5 text-muted-foreground mt-2" />
                   <Input id="email" type="email" value={userData.email} onChange={e => setUserData({ ...userData, email: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="phoneNumber">{t.settings.phoneNumber ?? "Phone Number"}</Label>
+                <div className="flex gap-2">
+                  <Phone className="h-5 w-5 text-muted-foreground mt-2" />
+                  <Input
+                    id="phoneNumber"
+                    value={userData.phoneNumber}
+                    onChange={(e) =>
+                      setUserData({
+                        ...userData,
+                        phoneNumber: e.target.value,
+                      })
+                    }
+                  />
                 </div>
               </div>
               <div className="grid gap-2">
@@ -209,10 +240,6 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
 
         </TabsContent>
 
-        {/* ── BILLING TAB ── */}
-        <TabsContent value="billing" className="mt-0">
-          <SubscriptionBilling />
-        </TabsContent>
       </Tabs>
 
       {/* Logout Dialog */}
