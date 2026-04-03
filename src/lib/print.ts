@@ -4,27 +4,6 @@ import printFrameCss from "../styles/print-frame.css?raw";
 export type PrintTarget = "receipt" | "analytics";
 
 function buildPrintHtml(title: string, bodyHtml: string) {
-  // Use an inline script so the new window/iframe prints ONLY after layout.
-  // Some mobile browsers show a blank tab if `print()` is called too early.
-  const script = `
-    (function () {
-      function doPrint() {
-        try {
-          window.focus();
-        } catch {}
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            try {
-              window.print();
-            } catch {}
-          });
-        });
-      }
-      if (document.readyState === "complete") doPrint();
-      else window.addEventListener("load", doPrint, { once: true });
-    })();
-  `;
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,21 +14,33 @@ function buildPrintHtml(title: string, bodyHtml: string) {
 </head>
 <body>
 <div class="receipt-root">${bodyHtml}</div>
-<script>${script}<\/script>
 </body>
 </html>`;
 }
 
+function printWhenReady(win: Window) {
+  try {
+    win.focus();
+  } catch {
+    // ignore
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      try {
+        win.print();
+      } catch {
+        // ignore
+      }
+    });
+  });
+}
+
 /**
- * Print a DOM node by id inside a **minimal iframe** that contains only:
- * - Embedded 80mm receipt CSS (no main-app Tailwind)
- * - Cloned receipt HTML
- *
- * This avoids blank multi-page output from:
- * - `window.print()` on the full SPA (visibility hacks + min-height layout)
- * - Copying all parent stylesheets into an iframe (conflicting rules / extra pages)
- *
- * Used for **all** platforms (Android, iOS, tablets, desktop).
+ * Print a DOM node by id using a **minimal document** (no main-app Tailwind):
+ * - Prefer `Blob` URL + new tab (mobile Chrome often prints the SPA if we print the main window).
+ * - Do **not** use `noopener` on `window.open` — with `noopener`, many browsers return `null`
+ *   to the opener, so `document.write` never runs and the user only sees `about:blank`.
+ * - Fallback: hidden iframe print.
  */
 export function printElementById(id: string, target: PrintTarget) {
   const el = document.getElementById(id);
@@ -63,33 +54,50 @@ export function printElementById(id: string, target: PrintTarget) {
   const title = target === "receipt" ? "Receipt" : "Analytics summary";
   const html = buildPrintHtml(title, clone.outerHTML);
 
-  // Prefer a new window/tab for mobile printing: many Android browsers ignore iframe-print
-  // and end up printing the whole SPA (background UI included).
-  const w = window.open("", "_blank", "noopener,noreferrer");
-  if (w && w.document) {
-    try {
-      w.document.open();
-      w.document.write(html);
-      w.document.close();
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const blobUrl = URL.createObjectURL(blob);
 
-      const cleanup = () => {
-        w.removeEventListener("afterprint", cleanup);
-        w.close();
-      };
-      w.addEventListener("afterprint", cleanup, { once: true });
-      // Printing is triggered inside the child document after load/layout.
-      return;
-    } catch {
-      // If anything fails (or popup is restricted), fall back to iframe.
+  const w = window.open(blobUrl, "_blank");
+  if (w) {
+    const revoke = () => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        // ignore
+      }
+    };
+
+    const cleanup = () => {
+      revoke();
       try {
         w.close();
       } catch {
         // ignore
       }
+    };
+
+    w.addEventListener("afterprint", () => cleanup(), { once: true });
+    window.setTimeout(() => {
+      if (!w.closed) {
+        revoke();
+      }
+    }, 60_000);
+
+    const startPrint = () => {
+      printWhenReady(w);
+    };
+
+    if (w.document.readyState === "complete") {
+      startPrint();
+    } else {
+      w.addEventListener("load", startPrint, { once: true });
     }
+
+    return;
   }
 
-  // Fallback: minimal hidden iframe print (works well on desktop / iOS Safari).
+  URL.revokeObjectURL(blobUrl);
+
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.setAttribute(
@@ -121,5 +129,12 @@ export function printElementById(id: string, target: PrintTarget) {
   window.setTimeout(() => {
     if (iframe.parentNode) iframe.remove();
   }, 8000);
-  // Printing is triggered inside the iframe document after load/layout.
+
+  if (frameDoc.readyState === "complete") {
+    printWhenReady(frameWin);
+  } else {
+    frameWin.addEventListener("load", () => printWhenReady(frameWin), {
+      once: true,
+    });
+  }
 }
