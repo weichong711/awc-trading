@@ -1,5 +1,7 @@
 /* Hide print containers on screen */
 #print-receipt,
+#print-receipt-orders,
+#print-receipt-analytics,
 #print-analytics {
   display: none;
 }
@@ -13,7 +15,11 @@
 
   /* Receipt print */
   body.print-target-receipt #print-receipt,
-  body.print-target-receipt #print-receipt * {
+  body.print-target-receipt #print-receipt *,
+  body.print-target-receipt #print-receipt-orders,
+  body.print-target-receipt #print-receipt-orders *,
+  body.print-target-receipt #print-receipt-analytics,
+  body.print-target-receipt #print-receipt-analytics * {
     visibility: visible !important;
   }
 
@@ -41,6 +47,8 @@
 
   /* Apply receipt paper style to BOTH print containers */
   #print-receipt,
+  #print-receipt-orders,
+  #print-receipt-analytics,
   #print-analytics {
     display: block !important;
     position: absolute !important;
@@ -59,22 +67,30 @@
 
   /* Compact spacing (works for both blocks) */
   #print-receipt .space-y-4 > * + *,
+  #print-receipt-orders .space-y-4 > * + *,
+  #print-receipt-analytics .space-y-4 > * + *,
   #print-analytics .space-y-4 > * + * {
     margin-top: 2mm !important;
   }
 
   #print-receipt .space-y-2 > * + *,
+  #print-receipt-orders .space-y-2 > * + *,
+  #print-receipt-analytics .space-y-2 > * + *,
   #print-analytics .space-y-2 > * + * {
     margin-top: 1mm !important;
   }
 
   #print-receipt .space-y-1 > * + *,
+  #print-receipt-orders .space-y-1 > * + *,
+  #print-receipt-analytics .space-y-1 > * + *,
   #print-analytics .space-y-1 > * + * {
     margin-top: 0.5mm !important;
   }
 
   /* Font sizes */
   #print-receipt h2,
+  #print-receipt-orders h2,
+  #print-receipt-analytics h2,
   #print-analytics h2 {
     font-size: 14px !important;
     margin: 0 !important;
@@ -82,75 +98,103 @@
   }
 
   #print-receipt .text-xl,
+  #print-receipt-orders .text-xl,
+  #print-receipt-analytics .text-xl,
   #print-analytics .text-xl {
     font-size: 14px !important;
   }
 
   #print-receipt .text-base,
+  #print-receipt-orders .text-base,
+  #print-receipt-analytics .text-base,
   #print-analytics .text-base {
     font-size: 10px !important;
   }
 
   #print-receipt .text-sm,
+  #print-receipt-orders .text-sm,
+  #print-receipt-analytics .text-sm,
   #print-analytics .text-sm {
     font-size: 10px !important;
   }
 
   #print-receipt .text-xs,
+  #print-receipt-orders .text-xs,
+  #print-receipt-analytics .text-xs,
   #print-analytics .text-xs {
     font-size: 9px !important;
   }
 
   /* Borders */
   #print-receipt .border-dashed,
+  #print-receipt-orders .border-dashed,
+  #print-receipt-analytics .border-dashed,
   #print-analytics .border-dashed {
     border-style: dashed !important;
     border-color: #000 !important;
   }
 
   #print-receipt .border-b-2,
+  #print-receipt-orders .border-b-2,
+  #print-receipt-analytics .border-b-2,
   #print-analytics .border-b-2 {
     border-bottom-width: 1px !important;
   }
 
   #print-receipt .border-t-2,
+  #print-receipt-orders .border-t-2,
+  #print-receipt-analytics .border-t-2,
   #print-analytics .border-t-2 {
     border-top-width: 1px !important;
   }
 
   #print-receipt .border-b,
+  #print-receipt-orders .border-b,
+  #print-receipt-analytics .border-b,
   #print-analytics .border-b {
     border-bottom-width: 0.5px !important;
   }
 
   #print-receipt .border-t,
+  #print-receipt-orders .border-t,
+  #print-receipt-analytics .border-t,
   #print-analytics .border-t {
     border-top-width: 0.5px !important;
   }
 
   /* Flex layout */
   #print-receipt .flex,
+  #print-receipt-orders .flex,
+  #print-receipt-analytics .flex,
   #print-analytics .flex {
     display: flex !important;
   }
 
   #print-receipt .justify-between,
+  #print-receipt-orders .justify-between,
+  #print-receipt-analytics .justify-between,
   #print-analytics .justify-between {
     justify-content: space-between !important;
   }
 
   #print-receipt .text-center,
+  #print-receipt-orders .text-center,
+  #print-receipt-analytics .text-center,
   #print-analytics .text-center {
     text-align: center !important;
   }
 
   #print-receipt .text-right,
+  #print-receipt-orders .text-right,
+  #print-receipt-analytics .text-right,
   #print-analytics .text-right {
     text-align: right !important;
   }
 
   /* Font weights */
   #print-receipt .font-bold,
+  #print-receipt-orders .font-bold,
+  #print-receipt-analytics .font-bold,
   #print-analytics .font-bold {
     font-weight: bold !important;
   }
@@ -158,6 +202,10 @@
   /* Prevent page breaks */
   #print-receipt,
   #print-receipt > *,
+  #print-receipt-orders,
+  #print-receipt-orders > *,
+  #print-receipt-analytics,
+  #print-receipt-analytics > *,
   #print-analytics,
   #print-analytics > * {
     page-break-inside: avoid !important;
