@@ -1,0 +1,200 @@
+/**
+ * Used ONLY inside a tiny iframe for “Print receipt / summary”.
+ * Self-contained: no Tailwind from the main app, no visibility:hidden hacks.
+ * Keeps output to one logical 80mm-wide receipt (height grows with content).
+ */
+
+@page {
+  size: 80mm auto;
+  margin: 0;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 80mm;
+  max-width: 80mm;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #000;
+  background: #fff;
+}
+
+.receipt-root {
+  width: 80mm;
+  max-width: 80mm;
+  padding: 3mm;
+  box-sizing: border-box;
+}
+
+.receipt-root * {
+  box-sizing: border-box;
+}
+
+.receipt-root h2 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.receipt-root p {
+  margin: 0;
+}
+
+.receipt-root strong {
+  font-weight: bold;
+}
+
+/* Screen + print: receipt is the only content; no “hidden” tricks */
+.receipt-root .print-only {
+  display: block !important;
+}
+
+/* Layout */
+.receipt-root .flex {
+  display: flex !important;
+}
+.receipt-root .flex-col {
+  flex-direction: column !important;
+}
+.receipt-root .flex-wrap {
+  flex-wrap: wrap !important;
+}
+.receipt-root .items-center {
+  align-items: center !important;
+}
+.receipt-root .justify-between {
+  justify-content: space-between !important;
+}
+.receipt-root .gap-2 {
+  gap: 0.25rem;
+}
+.receipt-root .shrink-0 {
+  flex-shrink: 0;
+}
+.receipt-root .w-full {
+  width: 100%;
+}
+
+/* Typography */
+.receipt-root .text-left {
+  text-align: left !important;
+}
+.receipt-root .text-center {
+  text-align: center !important;
+}
+.receipt-root .text-right {
+  text-align: right !important;
+}
+.receipt-root .font-bold {
+  font-weight: bold !important;
+}
+.receipt-root .font-mono {
+  font-family: "Courier New", Courier, monospace !important;
+}
+.receipt-root .text-xl {
+  font-size: 14px !important;
+}
+.receipt-root .text-base {
+  font-size: 10px !important;
+}
+.receipt-root .text-sm {
+  font-size: 10px !important;
+}
+.receipt-root .text-xs {
+  font-size: 9px !important;
+}
+.receipt-root .text-green-600 {
+  color: #16a34a !important;
+}
+.receipt-root .break-all {
+  word-break: break-all;
+}
+
+/* Spacing (Tailwind space-y) */
+.receipt-root .space-y-4 > * + * {
+  margin-top: 2mm !important;
+}
+.receipt-root .space-y-3 > * + * {
+  margin-top: 1.5mm !important;
+}
+.receipt-root .space-y-2 > * + * {
+  margin-top: 1mm !important;
+}
+.receipt-root .space-y-1 > * + * {
+  margin-top: 0.5mm !important;
+}
+.receipt-root .space-y-0\.5 > * + * {
+  margin-top: 0.125rem !important;
+}
+
+.receipt-root .mb-1 {
+  margin-bottom: 0.25rem !important;
+}
+.receipt-root .mb-2 {
+  margin-bottom: 0.5rem !important;
+}
+.receipt-root .mb-3 {
+  margin-bottom: 0.75rem !important;
+}
+.receipt-root .mt-1 {
+  margin-top: 0.25rem !important;
+}
+.receipt-root .mt-2 {
+  margin-top: 0.5rem !important;
+}
+.receipt-root .pl-2 {
+  padding-left: 0.5rem !important;
+}
+.receipt-root .pb-3 {
+  padding-bottom: 0.75rem !important;
+}
+.receipt-root .pb-4 {
+  padding-bottom: 1rem !important;
+}
+.receipt-root .pt-1 {
+  padding-top: 0.25rem !important;
+}
+.receipt-root .pt-2 {
+  padding-top: 0.5rem !important;
+}
+.receipt-root .pt-3 {
+  padding-top: 0.75rem !important;
+}
+
+/* Borders */
+.receipt-root .border-dashed {
+  border-style: dashed !important;
+}
+.receipt-root .border-black {
+  border-color: #000 !important;
+}
+.receipt-root .border-b {
+  border-bottom-width: 0.5px !important;
+  border-bottom-style: solid !important;
+}
+.receipt-root .border-b-2 {
+  border-bottom-width: 1px !important;
+}
+.receipt-root .border-t {
+  border-top-width: 0.5px !important;
+  border-top-style: solid !important;
+}
+.receipt-root .border-t-2 {
+  border-top-width: 1px !important;
+}
+
+/* One continuous strip; avoid weird blank pages from per-row break rules */
+.receipt-root {
+  page-break-after: auto;
+}
