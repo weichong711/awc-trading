@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ShoppingCart,
   Plus,
@@ -173,80 +174,86 @@ export function OrderSummary({
     void printElementById("print-receipt-orders", "receipt");
   };
 
-  return (
-    <div className="p-6">
-      {/* Hidden printable receipt (80mm) */}
-      {lastOrder && (
-        <div id="print-receipt-orders" className="space-y-4 font-mono text-sm">
-          <ReceiptMerchantHeader profile={businessProfile} />
+  /** Portal keeps the print node under `document.body` so mobile print preview is not blank when an ancestor (e.g. Radix Tabs) uses `display: none` / `hidden`. */
+  const printableReceipt =
+    lastOrder &&
+    typeof document !== "undefined" &&
+    createPortal(
+      <div
+        id="print-receipt-orders"
+        className="space-y-4 font-mono text-sm"
+        aria-hidden
+      >
+        <ReceiptMerchantHeader profile={businessProfile} />
 
-          {/* Order Info */}
-          <div className="space-y-1 border-b border-dashed border-black pb-3">
-            <div className="flex justify-between">
-              <span>{t.orders.receiptNo}:</span>
-              <span className="font-bold">#{lastOrder.id}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>{t.common.date}:</span>
-              <span>{new Date(lastOrder.date).toLocaleDateString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Time:</span>
-              <span>{new Date(lastOrder.date).toLocaleTimeString()}</span>
-            </div>
+        <div className="space-y-1 border-b border-dashed border-black pb-3">
+          <div className="flex justify-between">
+            <span>{t.orders.receiptNo}:</span>
+            <span className="font-bold">#{lastOrder.id}</span>
           </div>
-
-          {/* Items */}
-          <div className="border-b-2 border-dashed border-black pb-3">
-            <div className="font-bold mb-2">{t.orders.itemsLabel}</div>
-            {lastOrder.items.map((item, index) => (
-              <div key={index} className="mb-3">
-                <div className="flex justify-between">
-                  <span>{item.productName}</span>
-                </div>
-                <div className="flex justify-between text-xs pl-2">
-                  <span>
-                    {item.quantity} {item.unit} x RM {item.price.toFixed(2)}
-                  </span>
-                  <span className="font-bold">RM {item.total.toFixed(2)}</span>
-                </div>
-              </div>
-            ))}
+          <div className="flex justify-between">
+            <span>{t.common.date}:</span>
+            <span>{new Date(lastOrder.date).toLocaleDateString()}</span>
           </div>
-
-          {/* Totals */}
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>{t.orders.subtotalLabel}</span>
-              <span>RM {lastOrder.subtotal.toFixed(2)}</span>
-            </div>
-
-            {lastOrder.discount > 0 && (
-              <div className="flex justify-between text-green-600">
-                <span>
-                  {t.orders.discount}{" "}
-                  {lastOrder.discountType === "percentage"
-                    ? `(${lastOrder.discount}%)`
-                    : t.orders.discountFixed}
-                  :
-                </span>
-                <span>- RM {lastOrder.discountAmount.toFixed(2)}</span>
-              </div>
-            )}
-
-            <div className="flex justify-between text-base font-bold border-t-2 border-dashed border-black pt-2">
-              <span>{t.orders.totalFinal}</span>
-              <span>RM {lastOrder.total.toFixed(2)}</span>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="text-center text-xs border-t border-dashed border-black pt-3">
-            <p>{t.orders.thankYou}</p>
-            <p className="mt-1">{t.orders.comeAgain}</p>
+          <div className="flex justify-between">
+            <span>Time:</span>
+            <span>{new Date(lastOrder.date).toLocaleTimeString()}</span>
           </div>
         </div>
-      )}
+
+        <div className="border-b-2 border-dashed border-black pb-3">
+          <div className="font-bold mb-2">{t.orders.itemsLabel}</div>
+          {lastOrder.items.map((item, index) => (
+            <div key={index} className="mb-3">
+              <div className="flex justify-between">
+                <span>{item.productName}</span>
+              </div>
+              <div className="flex justify-between text-xs pl-2">
+                <span>
+                  {item.quantity} {item.unit} x RM {item.price.toFixed(2)}
+                </span>
+                <span className="font-bold">RM {item.total.toFixed(2)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex justify-between">
+            <span>{t.orders.subtotalLabel}</span>
+            <span>RM {lastOrder.subtotal.toFixed(2)}</span>
+          </div>
+
+          {lastOrder.discount > 0 && (
+            <div className="flex justify-between text-green-600">
+              <span>
+                {t.orders.discount}{" "}
+                {lastOrder.discountType === "percentage"
+                  ? `(${lastOrder.discount}%)`
+                  : t.orders.discountFixed}
+                :
+              </span>
+              <span>- RM {lastOrder.discountAmount.toFixed(2)}</span>
+            </div>
+          )}
+
+          <div className="flex justify-between text-base font-bold border-t-2 border-dashed border-black pt-2">
+            <span>{t.orders.totalFinal}</span>
+            <span>RM {lastOrder.total.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div className="text-center text-xs border-t border-dashed border-black pt-3">
+          <p>{t.orders.thankYou}</p>
+          <p className="mt-1">{t.orders.comeAgain}</p>
+        </div>
+      </div>,
+      document.body,
+    );
+
+  return (
+    <div className="p-6">
+      {printableReceipt}
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Products Section */}
