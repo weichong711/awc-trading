@@ -903,6 +903,7 @@ function AppContent() {
             <OrderSummary
               products={products}
               onPlaceOrder={handlePlaceOrder}
+              businessProfile={userProfile}
             />
           </TabsContent>
           <TabsContent value="expenses" className="mt-0">
@@ -922,6 +923,7 @@ function AppContent() {
               expenses={expenses}
               onVoidOrder={handleVoidOrder}
               onDeleteExpense={handleDeleteExpense}
+              businessProfile={userProfile}
             />
           </TabsContent>
           <TabsContent value="stock" className="mt-0">
