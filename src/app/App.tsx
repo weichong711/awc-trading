@@ -31,10 +31,6 @@ import { UserSettings } from "./components/UserSettings";
 import { StockManagement } from "./components/StockManagement";
 import { LoginPage } from "./components/LoginPage";
 import {
-  SubscriptionWall,
-  GraceBanner,
-} from "./components/SubscriptionWall";
-import {
   Product,
   Order,
   Expense,
@@ -42,13 +38,6 @@ import {
   StockAdjustment,
 } from "./types/business";
 import { Toaster } from "./components/ui/sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "./components/ui/dialog";
 import {
   LanguageProvider,
   useLanguage,
@@ -159,13 +148,7 @@ interface UserProfile {
   username: string;
   email: string;
   businessName: string;
-}
-interface SubscriptionAccess {
-  status: "trial" | "active" | "grace_period" | "blocked";
-  daysLeft: number;
-  graceDaysLeft: number;
-  expiresAt: string;
-  gracePeriodEndsAt: string;
+  phoneNumber: string;
 }
 type SyncStatus =
   | "idle"
@@ -173,46 +156,6 @@ type SyncStatus =
   | "saved"
   | "error"
   | "loading";
-
-// ── FPX Banks for renewal dialog ──────────────────────────────────────────────
-const FPX_BANKS_SIMPLE = [
-  {
-    code: "MBB0227",
-    name: "Maybank",
-    abbr: "M2U",
-    color: "#F5A623",
-  },
-  {
-    code: "CIMB0219",
-    name: "CIMB Clicks",
-    abbr: "CIMB",
-    color: "#CC0001",
-  },
-  {
-    code: "RHB0218",
-    name: "RHB Bank",
-    abbr: "RHB",
-    color: "#003D7C",
-  },
-  {
-    code: "HLB0224",
-    name: "Hong Leong",
-    abbr: "HLB",
-    color: "#004A97",
-  },
-  {
-    code: "PBB0233",
-    name: "Public Bank",
-    abbr: "PBB",
-    color: "#003087",
-  },
-  {
-    code: "BIMB0340",
-    name: "Bank Islam",
-    abbr: "BIMB",
-    color: "#009933",
-  },
-];
 
 export default function App() {
   return (
@@ -231,6 +174,7 @@ function AppContent() {
     username: "",
     email: "",
     businessName: "AWC TRADING",
+    phoneNumber: "",
   });
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -243,16 +187,6 @@ function AppContent() {
   const [syncStatus, setSyncStatus] =
     useState<SyncStatus>("idle");
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [subAccess, setSubAccess] =
-    useState<SubscriptionAccess | null>(null);
-  const [renewOpen, setRenewOpen] = useState(false);
-  const [renewBank, setRenewBank] = useState<
-    (typeof FPX_BANKS_SIMPLE)[0] | null
-  >(null);
-  const [renewStep, setRenewStep] = useState<
-    "select" | "processing" | "done"
-  >("select");
-  const [renewRef, setRenewRef] = useState("");
 
   const saveTimerRef = useRef<ReturnType<
     typeof setTimeout
@@ -287,7 +221,6 @@ function AppContent() {
       } else {
         setAuthSession(null);
         setDataLoaded(false);
-        setSubAccess(null);
       }
     });
     return () => subscription.unsubscribe();
@@ -302,29 +235,7 @@ function AppContent() {
   const loadEverything = async (token: string) => {
     setSyncStatus("loading");
     try {
-      // 1. Load subscription status first
-      const subRes = await fetch(
-        `${SERVER}/user/subscription`,
-        {
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            "X-User-Token": token,
-          },
-        },
-      );
-      if (subRes.ok) {
-        const { access } = await subRes.json();
-        setSubAccess(access);
-
-        // If blocked, stop here — don't load data
-        if (access?.status === "blocked") {
-          setSyncStatus("idle");
-          setDataLoaded(true);
-          return;
-        }
-      }
-
-      // 2. Load profile
+      // 1. Load profile
       const profileRes = await fetch(`${SERVER}/user/profile`, {
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
@@ -342,11 +253,12 @@ function AppContent() {
             email:
               profile.email || authSession?.user.email || "",
             businessName: profile.businessName || "AWC TRADING",
+            phoneNumber: profile.phoneNumber || "",
           });
         }
       }
 
-      // 3. Load business data
+      // 2. Load business data
       const dataRes = await fetch(`${SERVER}/user/data`, {
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
@@ -454,7 +366,6 @@ function AppContent() {
   // ── Auto-save (debounced 2s) ───────────────────────────────────────────────
   const scheduleSave = useCallback(() => {
     if (!authSession || !dataLoaded) return;
-    if (subAccess?.status === "blocked") return; // don't try to save if blocked
     setSyncStatus("saving");
     if (saveTimerRef.current)
       clearTimeout(saveTimerRef.current);
@@ -503,7 +414,6 @@ function AppContent() {
     orders,
     expenses,
     userProfile,
-    subAccess,
     stockItems,
     stockAdjustments,
   ]);
@@ -536,7 +446,6 @@ function AppContent() {
     setStockAdjustments([]);
     setDataLoaded(false);
     setSyncStatus("idle");
-    setSubAccess(null);
   };
 
   const handlePlaceOrder = (order: Omit<Order, "id">) =>
@@ -810,64 +719,6 @@ function AppContent() {
     if (data.user) setUserProfile(data.user);
   };
 
-  // ── Handle successful FPX renewal payment ─────────────────────────────────
-  const handleRenewalPayment = async (
-    ref: string,
-    bank: string,
-  ) => {
-    if (!authSession) return;
-    try {
-      const res = await fetch(
-        `${SERVER}/user/subscription/activate`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-            "X-User-Token": authSession.accessToken,
-          },
-          body: JSON.stringify({
-            paymentRef: ref,
-            bank,
-            amount: 59,
-          }),
-        },
-      );
-      if (res.ok) {
-        const { access } = await res.json();
-        setSubAccess(access);
-      }
-    } catch (err) {
-      console.error("Renewal activate error:", err);
-    }
-    setRenewOpen(false);
-    setRenewStep("select");
-    setRenewBank(null);
-  };
-
-  // ── Renewal from SubscriptionWall (blocked) ────────────────────────────────
-  const handleWallPayment = async (
-    ref: string,
-    bank: string,
-  ) => {
-    await handleRenewalPayment(ref, bank);
-    // Reload data after unblocking
-    setDataLoaded(false);
-  };
-
-  // ── Quick in-app renew (from banner) ────────────────────────────────────
-  const handleQuickRenew = async () => {
-    if (!renewBank) return;
-    setRenewStep("processing");
-    const ref =
-      "FPX" + Date.now().toString().slice(-10).toUpperCase();
-    await new Promise((r) => setTimeout(r, 2500));
-    setRenewRef(ref);
-    setRenewStep("done");
-    await handleRenewalPayment(ref, renewBank.name);
-    setRenewStep("done");
-  };
-
   // ── Sync badge ─────────────────────────────────────────────────────────────
   const SyncBadge = () => (
     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -914,37 +765,6 @@ function AppContent() {
     </div>
   );
 
-  // ── Subscription status badge for header ───────────────────────────────────
-  const SubBadge = () => {
-    if (!subAccess) return null;
-    const cfg = {
-      trial: {
-        label: `Trial: ${subAccess.daysLeft}d left`,
-        className: "bg-blue-100 text-blue-700 border-blue-200",
-      },
-      active: {
-        label: `Active: ${subAccess.daysLeft}d left`,
-        className:
-          "bg-green-100 text-green-700 border-green-200",
-      },
-      grace_period: {
-        label: `Grace: ${subAccess.graceDaysLeft}d left`,
-        className: "bg-red-100 text-red-700 border-red-200",
-      },
-      blocked: {
-        label: "Suspended",
-        className: "bg-red-600 text-white border-red-700",
-      },
-    }[subAccess.status];
-    return (
-      <span
-        className={`hidden sm:inline text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.className}`}
-      >
-        {cfg.label}
-      </span>
-    );
-  };
-
   // ── Loading screens ────────────────────────────────────────────────────────
   const LoadingScreen = ({ msg }: { msg: string }) => (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -975,56 +795,9 @@ function AppContent() {
   if (!dataLoaded)
     return <LoadingScreen msg="Loading your dashboard..." />;
 
-  // ── BLOCKED: show full-screen subscription wall ────────────────────────────
-  if (subAccess?.status === "blocked") {
-    const gracePeriodEnd = subAccess.gracePeriodEndsAt
-      ? new Date(subAccess.gracePeriodEndsAt)
-      : new Date();
-    const daysOverdue = Math.max(
-      0,
-      Math.ceil(
-        (Date.now() - gracePeriodEnd.getTime()) / 86400000,
-      ),
-    );
-    return (
-      <>
-        <SubscriptionWall
-          userEmail={authSession.user.email}
-          businessName={userProfile.businessName}
-          daysOverdue={daysOverdue}
-          onPaymentSuccess={handleWallPayment}
-          onLogout={handleLogout}
-        />
-        <Toaster />
-      </>
-    );
-  }
-
   // ── MAIN APP ──────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Grace period / expiry warning banner */}
-      {subAccess &&
-        (subAccess.status === "grace_period" ||
-          (subAccess.status === "trial" &&
-            subAccess.daysLeft <= 7) ||
-          (subAccess.status === "active" &&
-            subAccess.daysLeft <= 7)) && (
-          <GraceBanner
-            status={subAccess.status as any}
-            daysLeft={
-              subAccess.status === "grace_period"
-                ? subAccess.graceDaysLeft
-                : subAccess.daysLeft
-            }
-            onRenewClick={() => {
-              setRenewStep("select");
-              setRenewBank(null);
-              setRenewOpen(true);
-            }}
-          />
-        )}
-
       {/* Header */}
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
@@ -1038,7 +811,6 @@ function AppContent() {
                   <h1 className="text-xl font-medium">
                     {userProfile.businessName}
                   </h1>
-                  <SubBadge />
                 </div>
                 <p className="text-sm text-muted-foreground hidden sm:block">
                   {t.common.businessSystem}
@@ -1048,23 +820,6 @@ function AppContent() {
 
             <div className="flex items-center gap-3">
               <SyncBadge />
-
-              {/* Renew button if in grace or close to expiry */}
-              {subAccess &&
-                (subAccess.status === "grace_period" ||
-                  subAccess.daysLeft <= 3) && (
-                  <button
-                    onClick={() => {
-                      setRenewStep("select");
-                      setRenewBank(null);
-                      setRenewOpen(true);
-                    }}
-                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition-all"
-                  >
-                    <CreditCard className="h-3.5 w-3.5" />
-                    {t.common.renewNow}
-                  </button>
-                )}
 
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border">
                 <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
@@ -1182,7 +937,14 @@ function AppContent() {
           <TabsContent value="settings" className="mt-0">
             <UserSettings
               currentUser={userProfile}
-              onUpdateUser={handleUpdateUser}
+              onUpdateUser={(u) =>
+                void handleUpdateUser({
+                  ...u,
+                  phoneNumber:
+                    // Support older shape + newer phoneNumber field
+                    (u as any).phoneNumber ?? userProfile.phoneNumber,
+                })
+              }
               onLogout={handleLogout}
               onExportData={handleExportData}
               onImportData={handleImportData}
@@ -1191,136 +953,6 @@ function AppContent() {
           </TabsContent>
         </Tabs>
       </main>
-
-      {/* ── Quick Renew Dialog (from banner / header button) ── */}
-      <Dialog
-        open={renewOpen}
-        onOpenChange={(v) => {
-          if (!v) {
-            setRenewOpen(false);
-            setRenewStep("select");
-            setRenewBank(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-primary" />
-              Renew Subscription
-            </DialogTitle>
-            <DialogDescription>
-              Pay RM59 via FPX to renew for 30 days
-            </DialogDescription>
-          </DialogHeader>
-
-          {renewStep === "select" && (
-            <div className="space-y-4">
-              <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-sm">
-                    AWC Business Plan
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    30-day renewal
-                  </p>
-                </div>
-                <p className="text-xl font-bold text-primary">
-                  RM 59
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {FPX_BANKS_SIMPLE.map((bank) => (
-                  <button
-                    key={bank.code}
-                    onClick={() => setRenewBank(bank)}
-                    className={`flex items-center gap-2 p-2.5 rounded-xl border-2 text-left transition-all ${
-                      renewBank?.code === bank.code
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/40"
-                    }`}
-                  >
-                    <div
-                      className="h-7 w-7 rounded-lg flex items-center justify-center text-white font-black flex-shrink-0"
-                      style={{
-                        backgroundColor: bank.color,
-                        fontSize: "7px",
-                      }}
-                    >
-                      {bank.abbr}
-                    </div>
-                    <span className="text-xs font-medium">
-                      {bank.name}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={() => setRenewOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border text-sm text-muted-foreground hover:bg-muted"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleQuickRenew}
-                  disabled={!renewBank}
-                  className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 hover:bg-primary/90"
-                >
-                  Pay Now
-                </button>
-              </div>
-            </div>
-          )}
-
-          {renewStep === "processing" && (
-            <div className="flex flex-col items-center py-8 gap-4">
-              <div className="relative h-14 w-14">
-                <div className="absolute inset-0 rounded-full border-4 border-gray-200" />
-                <div className="absolute inset-0 rounded-full border-4 border-t-transparent animate-spin border-primary" />
-              </div>
-              <div className="text-center">
-                <p className="font-semibold">
-                  Processing FPX Payment...
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Connecting to {renewBank?.name} via PayNet
-                </p>
-              </div>
-            </div>
-          )}
-
-          {renewStep === "done" && (
-            <div className="flex flex-col items-center py-6 gap-4">
-              <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
-                <Cloud className="h-8 w-8 text-green-600" />
-              </div>
-              <div className="text-center">
-                <p className="font-bold text-lg text-green-700">
-                  Payment Successful!
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Ref:{" "}
-                  <span className="font-mono">{renewRef}</span>
-                </p>
-                <p className="text-sm mt-2">
-                  Your subscription is now active for{" "}
-                  <strong>30 days</strong>.
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setRenewOpen(false);
-                  setRenewStep("select");
-                }}
-                className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90"
-              >
-                Done
-              </button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       <Toaster />
     </div>
