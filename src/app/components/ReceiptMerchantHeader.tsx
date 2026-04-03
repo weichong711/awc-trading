@@ -19,7 +19,7 @@ export function ReceiptMerchantHeader({
   }
   if (profile.phoneNumber?.trim()) {
     lines.push({
-      label: t.settings.phoneNumber,
+      label: t.settings.phoneNumber ?? "Phone",
       value: profile.phoneNumber.trim(),
     });
   }
