@@ -18,21 +18,6 @@ export function printElementById(id: string, target: PrintTarget) {
   const el = document.getElementById(id);
   if (!el) return;
 
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("aria-hidden", "true");
-  iframe.setAttribute("title", target === "receipt" ? "Print receipt" : "Print summary");
-  iframe.style.cssText =
-    "position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;z-index:-1";
-
-  document.body.appendChild(iframe);
-
-  const frameWin = iframe.contentWindow;
-  const frameDoc = iframe.contentDocument;
-  if (!frameWin || !frameDoc) {
-    iframe.remove();
-    return;
-  }
-
   const clone = el.cloneNode(true) as HTMLElement;
   clone.style.display = "block";
   clone.style.visibility = "visible";
@@ -52,6 +37,57 @@ export function printElementById(id: string, target: PrintTarget) {
 </body>
 </html>`;
 
+  // Prefer a new window/tab for mobile printing: many Android browsers ignore iframe-print
+  // and end up printing the whole SPA (background UI included).
+  const w = window.open("", "_blank", "noopener,noreferrer");
+  if (w && w.document) {
+    try {
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+
+      const cleanup = () => {
+        w.removeEventListener("afterprint", cleanup);
+        w.close();
+      };
+      w.addEventListener("afterprint", cleanup, { once: true });
+
+      // Give the new document time to layout before printing.
+      w.focus();
+      w.requestAnimationFrame(() => {
+        w.requestAnimationFrame(() => {
+          w.print();
+        });
+      });
+      return;
+    } catch {
+      // If anything fails (or popup is restricted), fall back to iframe.
+      try {
+        w.close();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Fallback: minimal hidden iframe print (works well on desktop / iOS Safari).
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.setAttribute(
+    "title",
+    target === "receipt" ? "Print receipt" : "Print summary",
+  );
+  iframe.style.cssText =
+    "position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;z-index:-1";
+  document.body.appendChild(iframe);
+
+  const frameWin = iframe.contentWindow;
+  const frameDoc = iframe.contentDocument;
+  if (!frameWin || !frameDoc) {
+    iframe.remove();
+    return;
+  }
+
   frameDoc.open();
   frameDoc.write(html);
   frameDoc.close();
@@ -65,7 +101,7 @@ export function printElementById(id: string, target: PrintTarget) {
   frameWin.addEventListener("afterprint", cleanup, { once: true });
   window.setTimeout(() => {
     if (iframe.parentNode) iframe.remove();
-  }, 5000);
+  }, 8000);
 
   frameWin.focus();
   requestAnimationFrame(() => {
