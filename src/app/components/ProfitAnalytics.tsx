@@ -47,7 +47,8 @@ import {
   Line,
   Legend,
 } from "recharts";
-import { Order, Expense } from "../types/business";
+import { Order, Expense, ReceiptBusinessProfile } from "../types/business";
+import { ReceiptMerchantHeader } from "./ReceiptMerchantHeader";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -91,6 +92,7 @@ interface ProfitAnalyticsProps {
   expenses: Expense[];
   onVoidOrder?: (orderId: string) => void;
   onDeleteExpense?: (id: string) => void;
+  businessProfile: ReceiptBusinessProfile;
 }
 
 export function ProfitAnalytics({
@@ -98,6 +100,7 @@ export function ProfitAnalytics({
   expenses,
   onVoidOrder,
   onDeleteExpense,
+  businessProfile,
 }: ProfitAnalyticsProps) {
   const { t } = useLanguage();
   const a = t.analytics;
@@ -305,7 +308,8 @@ export function ProfitAnalytics({
   };
 
   const printWithTarget = (target: "receipt" | "analytics") => {
-    const id = target === "receipt" ? "print-receipt" : "print-analytics";
+    const id =
+      target === "receipt" ? "print-receipt-analytics" : "print-analytics";
     void printElementById(id, target);
   };
 
@@ -816,10 +820,10 @@ export function ProfitAnalytics({
 
           {/* Printable block */}
           <div id="print-analytics" className="print-only space-y-3 font-mono text-sm">
-            <div className="text-center border-b-2 border-dashed pb-4">
-              <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
-              <p className="text-xs">ANALYTICS SUMMARY</p>
-            </div>
+            <ReceiptMerchantHeader
+              profile={businessProfile}
+              subtitle="ANALYTICS SUMMARY"
+            />
 
             <div className="space-y-1 border-b border-dashed pb-3">
               <div className="flex justify-between">
@@ -901,11 +905,11 @@ export function ProfitAnalytics({
           </DialogHeader>
 
           {selectedOrder && (
-            <div id="print-receipt" className="print-only space-y-4 font-mono text-sm">
-              <div className="text-center border-b-2 border-dashed pb-4">
-                <h2 className="text-xl font-bold mb-1">AWC TRADING</h2>
-                <p className="text-xs">{t.orders.officialReceipt}</p>
-              </div>
+            <div
+              id="print-receipt-analytics"
+              className="print-only space-y-4 font-mono text-sm"
+            >
+              <ReceiptMerchantHeader profile={businessProfile} />
 
               <div className="space-y-1 border-b border-dashed pb-3">
                 <div className="flex justify-between">
