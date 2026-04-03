@@ -170,14 +170,14 @@ export function OrderSummary({
 
   const printReceipt = () => {
     // Use an isolated print iframe for better mobile/tablet compatibility.
-    void printElementById("print-receipt", "receipt");
+    void printElementById("print-receipt-orders", "receipt");
   };
 
   return (
     <div className="p-6">
       {/* Hidden printable receipt (80mm) */}
       {lastOrder && (
-        <div id="print-receipt" className="space-y-4 font-mono text-sm">
+        <div id="print-receipt-orders" className="space-y-4 font-mono text-sm">
           <ReceiptMerchantHeader profile={businessProfile} />
 
           {/* Order Info */}
