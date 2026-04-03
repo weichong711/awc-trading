@@ -12,20 +12,52 @@ function copyHeadStyles(fromDoc: Document, toDoc: Document) {
   }
 }
 
+function isAndroid() {
+  return /Android/i.test(navigator.userAgent);
+}
+
 /**
- * Print a DOM node by id inside a hidden iframe.
- *
- * Important for Android Chrome / tablets: `print()` must run in the **same
- * synchronous turn** as the user's tap. Any `await` / delayed `print()` can
- * look like "Chrome flashes and exits" or a blank preview.
+ * Print using the main document (no iframe).
+ * Prefer this on **Android** — printing from a hidden iframe can crash or
+ * force-close Chrome on some devices (e.g. Xiaomi / MIUI tablets).
  */
-export function printElementById(id: string, target: PrintTarget) {
+function printMainWindow(target: PrintTarget) {
+  document.body.classList.remove(
+    "print-target-receipt",
+    "print-target-analytics",
+  );
+  document.body.classList.add(
+    target === "receipt"
+      ? "print-target-receipt"
+      : "print-target-analytics",
+  );
+
+  const cleanup = () => {
+    document.body.classList.remove(
+      "print-target-receipt",
+      "print-target-analytics",
+    );
+    window.removeEventListener("afterprint", cleanup);
+  };
+
+  window.addEventListener("afterprint", cleanup, { once: true });
+  window.setTimeout(cleanup, 2000);
+
+  document.body.getBoundingClientRect();
+  window.focus();
+  window.print();
+}
+
+/**
+ * Print a DOM node by id inside a hidden iframe (better for some iOS/Safari
+ * cases where main-window print previews look blank).
+ */
+function printViaIframe(id: string, target: PrintTarget) {
   const el = document.getElementById(id);
   if (!el) return;
 
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
-  // Avoid 0×0 iframes — some WebViews behave badly; keep off-screen instead.
   iframe.style.cssText =
     "position:fixed;left:-9999px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;z-index:-1";
 
@@ -42,7 +74,6 @@ export function printElementById(id: string, target: PrintTarget) {
   frameDoc.write("<!doctype html><html><head></head><body></body></html>");
   frameDoc.close();
 
-  // Receipt print rules (no network wait — avoids async gap before print()).
   const style = frameDoc.createElement("style");
   style.textContent = printCss;
   frameDoc.head.appendChild(style);
@@ -69,4 +100,21 @@ export function printElementById(id: string, target: PrintTarget) {
   };
   frameWin.addEventListener("afterprint", cleanup, { once: true });
   window.setTimeout(cleanup, 3000);
+}
+
+/**
+ * `print()` must stay synchronous with the user's tap — no `await` before it.
+ *
+ * - **Android**: use main-window print (avoids Chrome/MIUI iframe crashes).
+ * - **Other platforms**: iframe print (often better iOS preview).
+ */
+export function printElementById(id: string, target: PrintTarget) {
+  if (!document.getElementById(id)) return;
+
+  if (isAndroid()) {
+    printMainWindow(target);
+    return;
+  }
+
+  printViaIframe(id, target);
 }
