@@ -13,7 +13,6 @@ import {
   X,
   Lock,
   Unlock,
-  Calendar,
   Mail,
   Building2,
   Loader2,
@@ -148,7 +147,6 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
     "block" | "unblock" | "detail" | null
   >(null);
   const [blockReason, setBlockReason] = useState("");
-  const [grantDays, setGrantDays] = useState("30");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMsg, setActionMsg] = useState("");
 
@@ -256,7 +254,7 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
             Authorization: `Bearer ${publicAnonKey}`,
             "X-User-Token": accessToken,
           },
-          body: JSON.stringify({ days: Number(grantDays) }),
+          body: JSON.stringify({}),
         },
       );
       const data = await res.json();
@@ -289,7 +287,7 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
           <div>
             <h2 className="text-xl font-bold">Admin Panel</h2>
             <p className="text-xs text-muted-foreground">
-              Manage all registered users & subscriptions
+              Manage all registered users
             </p>
           </div>
         </div>
@@ -665,8 +663,8 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
               Restore User Access
             </DialogTitle>
             <DialogDescription>
-              This will unlock the user and grant them a new
-              active period.
+              This removes the manual suspension so they can load and save
+              data again.
             </DialogDescription>
           </DialogHeader>
           {actionUser && (
@@ -684,26 +682,6 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
                     {actionUser.subscription.manualBlockReason}
                   </p>
                 )}
-              </div>
-              <div>
-                <label className="text-xs font-medium block mb-1.5">
-                  Grant access for (days)
-                </label>
-                <div className="flex gap-2">
-                  {["7", "14", "30", "60", "90"].map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setGrantDays(d)}
-                      className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                        grantDays === d
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "border-border hover:border-primary/40"
-                      }`}
-                    >
-                      {d}d
-                    </button>
-                  ))}
-                </div>
               </div>
               {actionMsg && (
                 <p className="text-sm text-center font-medium">
