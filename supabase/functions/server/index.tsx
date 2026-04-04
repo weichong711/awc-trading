@@ -16,11 +16,7 @@ app.use("/*", cors({
 }));
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const TRIAL_DAYS    = 14;
-const GRACE_DAYS    = 3;
-const PLAN_AMOUNT   = 59;
-const PLAN_DAYS     = 30;
-const ADMIN_EMAIL   = "admin@awctrading.com"; // ← change this to YOUR email
+const ADMIN_EMAIL = "admin@awctrading.com"; // ← change this to YOUR email
 
 // ── Helper: verify JWT and return user ───────────────────────────────────────
 async function getAuthUser(c: { req: { header: (name: string) => string | undefined } }) {
@@ -40,7 +36,7 @@ async function getAuthUser(c: { req: { header: (name: string) => string | undefi
   return user;
 }
 
-// ── Helper: compute subscription access status from stored data ───────────────
+// ── Helper: access for a free app (no paid trial / expiry). Only admin manualBlock locks an account. ──
 function computeAccessStatus(sub: any): {
   status: "trial" | "active" | "grace_period" | "blocked";
   daysLeft: number;
@@ -48,31 +44,26 @@ function computeAccessStatus(sub: any): {
   expiresAt: string;
   gracePeriodEndsAt: string;
 } {
-  const now = Date.now();
-
+  const empty = { expiresAt: "", gracePeriodEndsAt: "" };
   if (!sub) {
-    // Should not happen (signup always creates sub), treat as blocked
-    return { status: "blocked", daysLeft: 0, graceDaysLeft: 0, expiresAt: "", gracePeriodEndsAt: "" };
+    return { status: "active", daysLeft: 9999, graceDaysLeft: 0, ...empty };
   }
-
-  const expiresAt        = new Date(sub.expiresAt).getTime();
-  const gracePeriodEndsAt = new Date(sub.gracePeriodEndsAt).getTime();
-
-  const msLeft       = expiresAt - now;
-  const graceMsLeft  = gracePeriodEndsAt - now;
-  const daysLeft     = Math.max(0, Math.ceil(msLeft / 86400000));
-  const graceDaysLeft = Math.max(0, Math.ceil(graceMsLeft / 86400000));
-
-  let status: "trial" | "active" | "grace_period" | "blocked";
-  if (now < expiresAt) {
-    status = sub.plan === "trial" ? "trial" : "active";
-  } else if (now < gracePeriodEndsAt) {
-    status = "grace_period";
-  } else {
-    status = "blocked";
+  if (sub.manualBlock) {
+    return {
+      status: "blocked",
+      daysLeft: 0,
+      graceDaysLeft: 0,
+      expiresAt: sub.expiresAt || "",
+      gracePeriodEndsAt: sub.gracePeriodEndsAt || "",
+    };
   }
-
-  return { status, daysLeft, graceDaysLeft, expiresAt: sub.expiresAt, gracePeriodEndsAt: sub.gracePeriodEndsAt };
+  return {
+    status: "active",
+    daysLeft: 9999,
+    graceDaysLeft: 0,
+    expiresAt: sub.expiresAt || "",
+    gracePeriodEndsAt: sub.gracePeriodEndsAt || "",
+  };
 }
 
 // ── Health check ─────────────────────────────────────────────────────────────
@@ -103,32 +94,16 @@ app.post("/make-server-51f3fb75/auth/signup", async (c) => {
       return c.json({ error: `Signup failed: ${error.message}` }, 400);
     }
 
-    const userId   = data.user.id;
-    const now      = new Date();
-    const trialEnd = new Date(now.getTime() + TRIAL_DAYS * 86400000);
-    const graceEnd = new Date(trialEnd.getTime() + GRACE_DAYS * 86400000);
+    const userId = data.user.id;
+    const now    = new Date();
 
-    // Store profile
     await kv.set(`user:${userId}:profile`, {
       userId, email, username, businessName,
       createdAt: now.toISOString(),
     });
 
-    // Create free trial subscription automatically
-    await kv.set(`user:${userId}:subscription`, {
-      plan:              "trial",
-      status:            "trial",
-      expiresAt:         trialEnd.toISOString(),
-      gracePeriodEndsAt: graceEnd.toISOString(),
-      trialStartedAt:    now.toISOString(),
-      trialEndsAt:       trialEnd.toISOString(),
-      lastPaymentDate:   null,
-      lastPaymentRef:    null,
-      paymentHistory:    [],
-    });
-
-    console.log(`New user registered: ${email} (${userId}) — trial until ${trialEnd.toISOString()}`);
-    return c.json({ success: true, userId, trialEndsAt: trialEnd.toISOString() });
+    console.log(`New user registered: ${email} (${userId})`);
+    return c.json({ success: true, userId });
   } catch (err) {
     console.log("Signup exception:", err);
     return c.json({ error: `Server error during signup: ${err}` }, 500);
@@ -141,24 +116,7 @@ app.get("/make-server-51f3fb75/user/subscription", async (c) => {
     const user = await getAuthUser(c);
     if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-    let sub = await kv.get(`user:${user.id}:subscription`);
-
-    // If no subscription record exists (old account), create a trial
-    if (!sub) {
-      const now      = new Date();
-      const trialEnd = new Date(now.getTime() + TRIAL_DAYS * 86400000);
-      const graceEnd = new Date(trialEnd.getTime() + GRACE_DAYS * 86400000);
-      sub = {
-        plan: "trial", status: "trial",
-        expiresAt: trialEnd.toISOString(),
-        gracePeriodEndsAt: graceEnd.toISOString(),
-        trialStartedAt: now.toISOString(),
-        trialEndsAt: trialEnd.toISOString(),
-        lastPaymentDate: null, lastPaymentRef: null, paymentHistory: [],
-      };
-      await kv.set(`user:${user.id}:subscription`, sub);
-    }
-
+    const sub = await kv.get(`user:${user.id}:subscription`);
     const access = computeAccessStatus(sub);
     return c.json({ subscription: sub, access });
   } catch (err) {
@@ -167,50 +125,22 @@ app.get("/make-server-51f3fb75/user/subscription", async (c) => {
   }
 });
 
-// ── ACTIVATE / RENEW subscription (called after successful FPX payment) ───────
+// ── ACTIVATE / RENEW (legacy FPX hook — app is free; endpoint kept so old clients do not hard-fail) ──
 app.post("/make-server-51f3fb75/user/subscription/activate", async (c) => {
   try {
     const user = await getAuthUser(c);
     if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-    const { paymentRef, bank, amount } = await c.req.json();
-    if (!paymentRef) return c.json({ error: "paymentRef is required" }, 400);
-
-    const existing = await kv.get(`user:${user.id}:subscription`) || {};
-    const now      = new Date();
-
-    // If currently active, extend from current expiry; otherwise start fresh from now
-    const currentExpiry = existing.expiresAt ? new Date(existing.expiresAt) : now;
-    const startFrom     = currentExpiry > now ? currentExpiry : now;
-    const newExpiry     = new Date(startFrom.getTime() + PLAN_DAYS * 86400000);
-    const newGraceEnd   = new Date(newExpiry.getTime() + GRACE_DAYS * 86400000);
-
-    const paymentRecord = {
-      ref:    paymentRef,
-      bank:   bank || "Unknown",
-      amount: amount || PLAN_AMOUNT,
-      paidAt: now.toISOString(),
-    };
-
-    const updated = {
-      ...existing,
-      plan:              "business",
-      status:            "active",
-      expiresAt:         newExpiry.toISOString(),
-      gracePeriodEndsAt: newGraceEnd.toISOString(),
-      lastPaymentDate:   now.toISOString(),
-      lastPaymentRef:    paymentRef,
-      paymentHistory:    [paymentRecord, ...(existing.paymentHistory || [])],
-    };
-
-    await kv.set(`user:${user.id}:subscription`, updated);
-    const access = computeAccessStatus(updated);
-
-    console.log(`Subscription activated for user ${user.id}: expires ${newExpiry.toISOString()}`);
-    return c.json({ success: true, subscription: updated, access });
+    const sub = await kv.get(`user:${user.id}:subscription`);
+    return c.json({
+      success: true,
+      message: "Paid subscriptions are not used; accounts already have full access.",
+      subscription: sub ?? null,
+      access: computeAccessStatus(sub),
+    });
   } catch (err) {
     console.log("Activate subscription error:", err);
-    return c.json({ error: `Error activating subscription: ${err}` }, 500);
+    return c.json({ error: `Error: ${err}` }, 500);
   }
 });
 
@@ -270,15 +200,11 @@ app.post("/make-server-51f3fb75/admin/users/:userId/block", async (c) => {
     const existing = await kv.get(`user:${userId}:subscription`) || {};
     const now = new Date();
 
-    // Set expiry to past so computeAccessStatus returns "blocked"
-    const pastDate = new Date(now.getTime() - 86400000); // yesterday
     const updated = {
       ...existing,
-      manualBlock:        true,
-      manualBlockReason:  reason || "Manually blocked by admin",
-      manualBlockAt:      now.toISOString(),
-      expiresAt:          pastDate.toISOString(),
-      gracePeriodEndsAt:  pastDate.toISOString(),
+      manualBlock:       true,
+      manualBlockReason: reason || "Manually blocked by admin",
+      manualBlockAt:     now.toISOString(),
     };
 
     await kv.set(`user:${userId}:subscription`, updated);
@@ -298,27 +224,21 @@ app.post("/make-server-51f3fb75/admin/users/:userId/unblock", async (c) => {
     if (admin.email !== ADMIN_EMAIL) return c.json({ error: "Forbidden: Admin only" }, 403);
 
     const { userId } = c.req.param();
-    const { days } = await c.req.json().catch(() => ({ days: 30 }));
-    const grantDays = Number(days) || 30;
 
     const existing = await kv.get(`user:${userId}:subscription`) || {};
     const now      = new Date();
-    const newExpiry = new Date(now.getTime() + grantDays * 86400000);
-    const newGrace  = new Date(newExpiry.getTime() + GRACE_DAYS * 86400000);
 
     const updated = {
       ...existing,
-      plan:              existing.plan === "trial" ? "trial" : "business",
       manualBlock:       false,
       manualBlockReason: null,
-      expiresAt:         newExpiry.toISOString(),
-      gracePeriodEndsAt: newGrace.toISOString(),
+      manualBlockAt:     null,
       adminRestoredAt:   now.toISOString(),
     };
 
     await kv.set(`user:${userId}:subscription`, updated);
-    console.log(`Admin unblocked user ${userId}, granted ${grantDays} days.`);
-    return c.json({ success: true, message: `User unblocked — access granted for ${grantDays} days` });
+    console.log(`Admin unblocked user ${userId}`);
+    return c.json({ success: true, message: "User unblocked — full access restored." });
   } catch (err) {
     console.log("Admin unblock user error:", err);
     return c.json({ error: `Unblock error: ${err}` }, 500);
@@ -366,11 +286,10 @@ app.get("/make-server-51f3fb75/user/data", async (c) => {
     const user = await getAuthUser(c);
     if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-    // Check subscription — blocked users cannot read data
     const sub    = await kv.get(`user:${user.id}:subscription`);
     const access = computeAccessStatus(sub);
     if (access.status === "blocked") {
-      return c.json({ error: "Subscription expired. Please renew to access your data.", blocked: true }, 403);
+      return c.json({ error: "This account has been suspended. Contact support if you need help.", blocked: true }, 403);
     }
 
     const products = await kv.get(`user:${user.id}:products`);
@@ -398,11 +317,10 @@ app.post("/make-server-51f3fb75/user/data", async (c) => {
     const user = await getAuthUser(c);
     if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-    // Check subscription — blocked users cannot save data
     const sub    = await kv.get(`user:${user.id}:subscription`);
     const access = computeAccessStatus(sub);
     if (access.status === "blocked") {
-      return c.json({ error: "Subscription expired. Please renew to save data.", blocked: true }, 403);
+      return c.json({ error: "This account has been suspended. Saving is disabled.", blocked: true }, 403);
     }
 
     const { products, orders, expenses, stockItems, stockAdjustments } = await c.req.json();
