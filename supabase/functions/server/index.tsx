@@ -245,6 +245,50 @@ app.post("/make-server-51f3fb75/admin/users/:userId/unblock", async (c) => {
   }
 });
 
+// ── ADMIN: set user password (Supabase Auth Admin API) ───────────────────────
+app.post("/make-server-51f3fb75/admin/users/:userId/password", async (c) => {
+  try {
+    const admin = await getAuthUser(c);
+    if (!admin) return c.json({ error: "Unauthorized" }, 401);
+    if (admin.email !== ADMIN_EMAIL) return c.json({ error: "Forbidden: Admin only" }, 403);
+
+    const { userId } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const password =
+      typeof body.password === "string" ? body.password : "";
+
+    if (!password || password.length < 6) {
+      return c.json(
+        { error: "Password must be at least 6 characters." },
+        400,
+      );
+    }
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { password },
+    );
+    if (error) {
+      console.log("Admin updateUserById error:", error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    return c.json({
+      success: true,
+      message: "Password updated.",
+      user: { id: data.user!.id, email: data.user!.email },
+    });
+  } catch (err) {
+    console.log("Admin password update error:", err);
+    return c.json({ error: `Password update error: ${err}` }, 500);
+  }
+});
+
 // ── GET user profile ──────────────────────────────────────────────────────────
 app.get("/make-server-51f3fb75/user/profile", async (c) => {
   try {
