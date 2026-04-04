@@ -14,6 +14,7 @@ import {
   Lock,
   Unlock,
   Mail,
+  KeyRound,
   Building2,
   Loader2,
   Info,
@@ -144,11 +145,13 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
   const [actionUser, setActionUser] =
     useState<AdminUser | null>(null);
   const [actionType, setActionType] = useState<
-    "block" | "unblock" | "detail" | null
+    "block" | "unblock" | "detail" | "resetPassword" | null
   >(null);
   const [blockReason, setBlockReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMsg, setActionMsg] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPassword2, setNewPassword2] = useState("");
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -264,13 +267,54 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
       setTimeout(() => {
         setActionUser(null);
         setActionType(null);
-        setGrantDays("30");
         setActionMsg("");
       }, 1200);
     } catch (err: any) {
       setActionMsg(
         "❌ " + (err.message || "Failed to unblock user"),
       );
+    }
+    setActionLoading(false);
+  };
+
+  const handleSetPassword = async () => {
+    if (!actionUser) return;
+    if (newPassword.length < 6) {
+      setActionMsg("❌ Password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== newPassword2) {
+      setActionMsg("❌ Passwords do not match.");
+      return;
+    }
+    setActionLoading(true);
+    setActionMsg("");
+    try {
+      const res = await fetch(
+        `${SERVER}/admin/users/${actionUser.id}/password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+            "X-User-Token": accessToken,
+          },
+          body: JSON.stringify({ password: newPassword }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setActionMsg(`✅ ${data.message}`);
+      await fetchUsers();
+      setTimeout(() => {
+        setActionUser(null);
+        setActionType(null);
+        setNewPassword("");
+        setNewPassword2("");
+        setActionMsg("");
+      }, 1200);
+    } catch (err: any) {
+      setActionMsg("❌ " + (err.message || "Failed to update password"));
     }
     setActionLoading(false);
   };
@@ -537,7 +581,6 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
                                   onClick={() => {
                                     setActionUser(user);
                                     setActionType("unblock");
-                                    setGrantDays("30");
                                     setActionMsg("");
                                   }}
                                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-green-100 text-green-700 border border-green-200 text-xs font-medium hover:bg-green-200 transition-colors"
@@ -717,6 +760,82 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
         </DialogContent>
       </Dialog>
 
+      {/* ── SET USER PASSWORD (Supabase Auth) ── */}
+      <Dialog
+        open={actionType === "resetPassword"}
+        onOpenChange={(v) => {
+          if (!v) setActionType("detail");
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              Set password
+            </DialogTitle>
+            <DialogDescription>
+              Sets this user&apos;s sign-in password. Share the new password
+              with them securely (not by email if you can avoid it).
+            </DialogDescription>
+          </DialogHeader>
+          {actionUser && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground font-medium">
+                {actionUser.email}
+              </p>
+              <div>
+                <label className="text-xs font-medium block mb-1.5">
+                  New password
+                </label>
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={6}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1.5">
+                  Confirm password
+                </label>
+                <Input
+                  type="password"
+                  value={newPassword2}
+                  onChange={(e) => setNewPassword2(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={6}
+                />
+              </div>
+              {actionMsg && (
+                <p className="text-sm text-center font-medium">{actionMsg}</p>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setActionType("detail")}
+                  disabled={actionLoading}
+                >
+                  Back
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={() => void handleSetPassword()}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Save password"
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* ── DETAIL DIALOG ── */}
       <Dialog
         open={actionType === "detail"}
@@ -867,34 +986,50 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
                     )}
 
                   {/* Quick actions */}
-                  <div className="flex gap-2 pt-1">
-                    {actionUser.access.status === "blocked" ? (
-                      <Button
-                        onClick={() => setActionType("unblock")}
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                        size="sm"
-                      >
-                        <Unlock className="h-4 w-4 mr-1.5" />
-                        Restore Access
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={() => setActionType("block")}
-                        variant="destructive"
-                        className="flex-1"
-                        size="sm"
-                      >
-                        <Ban className="h-4 w-4 mr-1.5" />
-                        Block User
-                      </Button>
-                    )}
+                  <div className="flex flex-col gap-2 pt-1">
                     <Button
                       variant="outline"
-                      onClick={() => setActionType(null)}
+                      className="w-full"
                       size="sm"
+                      onClick={() => {
+                        setNewPassword("");
+                        setNewPassword2("");
+                        setActionMsg("");
+                        setActionType("resetPassword");
+                      }}
                     >
-                      Close
+                      <KeyRound className="h-4 w-4 mr-1.5" />
+                      Set password
                     </Button>
+                    <div className="flex gap-2">
+                      {actionUser.access.status === "blocked" ? (
+                        <Button
+                          onClick={() => setActionType("unblock")}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                          size="sm"
+                        >
+                          <Unlock className="h-4 w-4 mr-1.5" />
+                          Restore Access
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => setActionType("block")}
+                          variant="destructive"
+                          className="flex-1"
+                          size="sm"
+                        >
+                          <Ban className="h-4 w-4 mr-1.5" />
+                          Block User
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        onClick={() => setActionType(null)}
+                        size="sm"
+                      >
+                        Close
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );
