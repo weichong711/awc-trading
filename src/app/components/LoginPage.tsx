@@ -396,14 +396,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </div>
 
               {/* Pricing info */}
-              <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium">AWC Trading</p>
-                  <p className="text-xs text-muted-foreground">Free to use — cloud sync included</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-base font-bold text-primary">FREE</p>
-                  <p className="text-xs text-muted-foreground">full access</p>
+            
                 </div>
               </div>
 
