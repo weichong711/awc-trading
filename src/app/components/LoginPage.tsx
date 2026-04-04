@@ -397,9 +397,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
               {/* Pricing info */}
             
-                </div>
-              </div>
-
               <button
                 type="submit"
                 disabled={loading}
