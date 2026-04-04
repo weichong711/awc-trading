@@ -170,7 +170,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             </div>
           </div>
           <p className="text-slate-600 text-xs mt-4 text-center">
-            RM59/month · Cancel anytime · No contract
+            Cancel anytime · No contract
           </p>
         </div>
       </div>
@@ -217,7 +217,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           {/* Header */}
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
-              {mode === "signin" ? "Welcome back 👋" : "Start your free trial 🚀"}
+              {mode === "signin" ? "Welcome back 👋" : "Create your account 🚀"}
             </h2>
             <p className="text-muted-foreground text-sm mt-1">
               {mode === "signin"
@@ -398,12 +398,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               {/* Pricing info */}
               <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-medium">AWC Business Plan</p>
-                  <p className="text-xs text-muted-foreground">Free trial, then RM59/month</p>
+                  <p className="text-xs font-medium">AWC Trading</p>
+                  <p className="text-xs text-muted-foreground">Free to use — cloud sync included</p>
                 </div>
                 <div className="text-right">
                   <p className="text-base font-bold text-primary">FREE</p>
-                  <p className="text-xs text-muted-foreground">to start</p>
+                  <p className="text-xs text-muted-foreground">full access</p>
                 </div>
               </div>
 
