@@ -38,6 +38,33 @@ import {
 
 const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-51f3fb75`;
 
+/** Edge Function should always return JSON; plain-text 404 breaks res.json(). */
+async function parseAdminJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  let data: Record<string, unknown> = {};
+  if (text) {
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      const hint =
+        res.status === 404
+          ? " Redeploy the Supabase Edge Function (Dashboard → Edge Functions → Deploy) so routes like /password exist."
+          : "";
+      throw new Error(
+        `Server returned non-JSON (${res.status}): ${text.trim().slice(0, 120)}.${hint}`,
+      );
+    }
+  }
+  if (!res.ok) {
+    const msg =
+      typeof data.error === "string"
+        ? data.error
+        : `Request failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AdminUser {
   id: string;
@@ -163,10 +190,8 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
           "X-User-Token": accessToken,
         },
       });
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.error || "Failed to load users");
-      setUsers(data.users);
+      const data = await parseAdminJson(res);
+      setUsers((data.users as AdminUser[]) || []);
     } catch (err: any) {
       setError(err.message || "Failed to load users");
     }
@@ -224,8 +249,7 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
           body: JSON.stringify({ reason: blockReason }),
         },
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      await parseAdminJson(res);
       setActionMsg("✅ User blocked successfully.");
       await fetchUsers();
       setTimeout(() => {
@@ -260,9 +284,10 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
           body: JSON.stringify({}),
         },
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setActionMsg(`✅ ${data.message}`);
+      const data = await parseAdminJson(res);
+      setActionMsg(
+        `✅ ${typeof data.message === "string" ? data.message : "Done"}`,
+      );
       await fetchUsers();
       setTimeout(() => {
         setActionUser(null);
@@ -302,9 +327,10 @@ export function AdminPanel({ accessToken }: AdminPanelProps) {
           body: JSON.stringify({ password: newPassword }),
         },
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setActionMsg(`✅ ${data.message}`);
+      const data = await parseAdminJson(res);
+      setActionMsg(
+        `✅ ${typeof data.message === "string" ? data.message : "Password updated."}`,
+      );
       await fetchUsers();
       setTimeout(() => {
         setActionUser(null);
