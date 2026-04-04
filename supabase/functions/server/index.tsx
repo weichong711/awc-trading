@@ -383,4 +383,16 @@ app.post("/make-server-51f3fb75/user/data", async (c) => {
   }
 });
 
+// Return JSON for unknown routes (default Hono 404 is plain "404 Not Found" — breaks fetch().json())
+app.notFound((c) =>
+  c.json(
+    {
+      error: "Not found",
+      path: c.req.path,
+      method: c.req.method,
+    },
+    404,
+  ),
+);
+
 Deno.serve(app.fetch);
