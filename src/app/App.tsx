@@ -45,7 +45,103 @@ import {
 
 const LOCAL_KEY = "awc_local_data";
 
-// ── Sample products for new users ────────────────────────────────────────────
+// ── Set New Password Screen (shown after clicking reset email link) ───────────
+function SetNewPasswordScreen({ email, onDone }: { email: string; onDone: () => void }) {
+  const [pw, setPw]         = useState("");
+  const [pw2, setPw2]       = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg]       = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pw.length < 6) { setMsg({ type: "error", text: "Password must be at least 6 characters." }); return; }
+    if (pw !== pw2)    { setMsg({ type: "error", text: "Passwords do not match." }); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    if (error) {
+      setMsg({ type: "error", text: error.message });
+    } else {
+      setMsg({ type: "success", text: "Password updated! Redirecting to login..." });
+      await supabase.auth.signOut();
+      setTimeout(onDone, 1800);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-6">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center">
+          <div className="h-14 w-14 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <ShoppingCart className="h-8 w-8 text-primary-foreground" />
+          </div>
+          <h1 className="text-2xl font-bold">Set new password</h1>
+          <p className="text-sm text-muted-foreground mt-1">for {email}</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">New Password</label>
+            <div className="relative">
+              <input
+                type={showPw ? "text" : "password"}
+                value={pw}
+                onChange={e => { setPw(e.target.value); setMsg(null); }}
+                placeholder="Min. 6 characters"
+                className="w-full border rounded-xl px-4 pr-11 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                required
+              />
+              <button type="button" onClick={() => setShowPw(v => !v)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showPw
+                  ? <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  : <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                }
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Confirm New Password</label>
+            <input
+              type="password"
+              value={pw2}
+              onChange={e => { setPw2(e.target.value); setMsg(null); }}
+              placeholder="Re-enter new password"
+              className={`w-full border rounded-xl px-4 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 transition-all ${
+                pw2 && pw2 !== pw ? "border-red-400 focus:ring-red-200" : "focus:ring-primary/30 focus:border-primary"
+              }`}
+              required
+            />
+            {pw2 && pw2 !== pw && <p className="text-xs text-red-500">Passwords do not match</p>}
+          </div>
+
+          {msg && (
+            <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
+              msg.type === "success"
+                ? "bg-green-50 border border-green-200 text-green-700"
+                : "bg-red-50 border border-red-200 text-red-700"
+            }`}>
+              {msg.text}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {loading
+              ? <><Loader2 className="h-4 w-4 animate-spin" />Updating...</>
+              : "Set New Password"
+            }
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
 const sampleProducts: Product[] = [
   {
     id: "1",
@@ -170,6 +266,7 @@ function AppContent() {
   const [authSession, setAuthSession] =
     useState<AuthSession | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isRecoverySession, setIsRecoverySession] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>({
     username: "",
     email: "",
@@ -210,6 +307,16 @@ function AppContent() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (_e === "PASSWORD_RECOVERY") {
+        // User clicked the reset link — show set-new-password screen
+        setIsRecoverySession(true);
+        setAuthSession(session ? {
+          accessToken: session.access_token,
+          user: { id: session.user.id, email: session.user.email! },
+        } : null);
+        setAuthLoading(false);
+        return;
+      }
       if (session) {
         setAuthSession({
           accessToken: session.access_token,
@@ -785,6 +892,19 @@ function AppContent() {
 
   if (authLoading)
     return <LoadingScreen msg="Checking your session..." />;
+  if (isRecoverySession && authSession)
+    return (
+      <>
+        <SetNewPasswordScreen
+          email={authSession.user.email}
+          onDone={() => {
+            setIsRecoverySession(false);
+            setAuthSession(null);
+          }}
+        />
+        <Toaster />
+      </>
+    );
   if (!authSession)
     return (
       <>
