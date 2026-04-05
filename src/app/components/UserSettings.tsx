@@ -10,7 +10,13 @@ import {
   Shield,
   Globe,
   Phone,
+  Eye,
+  EyeOff,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -55,6 +61,55 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const isAdmin = currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const [settingsTab, setSettingsTab] = useState(isAdmin ? "admin" : "profile");
+
+  // ── Change password state ─────────────────────────────────────────────────
+  const [pwCurrent, setPwCurrent]   = useState("");
+  const [pwNew, setPwNew]           = useState("");
+  const [pwConfirm, setPwConfirm]   = useState("");
+  const [pwLoading, setPwLoading]   = useState(false);
+  const [pwMsg, setPwMsg]           = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showPwCurrent, setShowPwCurrent] = useState(false);
+  const [showPwNew, setShowPwNew]         = useState(false);
+  const [showPwConfirm, setShowPwConfirm] = useState(false);
+
+  const handleChangePassword = async () => {
+    setPwMsg(null);
+    if (!pwCurrent || !pwNew || !pwConfirm) {
+      setPwMsg({ type: "error", text: "Please fill in all password fields." });
+      return;
+    }
+    if (pwNew.length < 6) {
+      setPwMsg({ type: "error", text: "New password must be at least 6 characters." });
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      setPwMsg({ type: "error", text: "New passwords do not match." });
+      return;
+    }
+    setPwLoading(true);
+    try {
+      // Re-authenticate with current password first to verify it's correct
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: pwCurrent,
+      });
+      if (signInError) {
+        setPwMsg({ type: "error", text: "Current password is incorrect." });
+        return;
+      }
+      const { error } = await supabase.auth.updateUser({ password: pwNew });
+      if (error) {
+        setPwMsg({ type: "error", text: error.message });
+      } else {
+        setPwMsg({ type: "success", text: "Password updated successfully." });
+        setPwCurrent(""); setPwNew(""); setPwConfirm("");
+      }
+    } catch (err) {
+      setPwMsg({ type: "error", text: `Unexpected error: ${err}` });
+    } finally {
+      setPwLoading(false);
+    }
+  };
 
   const handleImport = () => {
     const input = document.createElement("input");
@@ -205,16 +260,86 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
               <CardTitle>{t.settings.security}</CardTitle>
               <CardDescription>{t.settings.securityDesc}</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="flex gap-2 items-center">
-                  <Lock className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium">{t.settings.password}</p>
-                    <p className="text-xs text-muted-foreground">{t.settings.passwordManagedBy}</p>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                {/* Current password */}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="pw-current">Current Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="pw-current"
+                      type={showPwCurrent ? "text" : "password"}
+                      value={pwCurrent}
+                      onChange={e => { setPwCurrent(e.target.value); setPwMsg(null); }}
+                      className="pl-9 pr-10"
+                      placeholder="Enter current password"
+                    />
+                    <button type="button" onClick={() => setShowPwCurrent(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showPwCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                 </div>
-                <Button variant="outline" disabled>{t.settings.changePassword}</Button>
+                {/* New password */}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="pw-new">New Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="pw-new"
+                      type={showPwNew ? "text" : "password"}
+                      value={pwNew}
+                      onChange={e => { setPwNew(e.target.value); setPwMsg(null); }}
+                      className="pl-9 pr-10"
+                      placeholder="Min. 6 characters"
+                    />
+                    <button type="button" onClick={() => setShowPwNew(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showPwNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                {/* Confirm new password */}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="pw-confirm">Confirm New Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="pw-confirm"
+                      type={showPwConfirm ? "text" : "password"}
+                      value={pwConfirm}
+                      onChange={e => { setPwConfirm(e.target.value); setPwMsg(null); }}
+                      className={`pl-9 pr-10 ${pwConfirm && pwConfirm !== pwNew ? "border-red-400" : ""}`}
+                      placeholder="Re-enter new password"
+                    />
+                    <button type="button" onClick={() => setShowPwConfirm(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showPwConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {pwConfirm && pwConfirm !== pwNew && (
+                    <p className="text-xs text-red-500">Passwords do not match</p>
+                  )}
+                </div>
+
+                {/* Feedback message */}
+                {pwMsg && (
+                  <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
+                    pwMsg.type === "success"
+                      ? "bg-green-50 border border-green-200 text-green-700"
+                      : "bg-red-50 border border-red-200 text-red-700"
+                  }`}>
+                    {pwMsg.type === "success"
+                      ? <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                      : <AlertCircle className="h-4 w-4 flex-shrink-0" />}
+                    {pwMsg.text}
+                  </div>
+                )}
+
+                <Button onClick={handleChangePassword} disabled={pwLoading}>
+                  {pwLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Updating...</> : "Update Password"}
+                </Button>
               </div>
             </CardContent>
           </Card>
