@@ -15,6 +15,10 @@ const FEATURES = [
   { icon: Zap,          label: "Real-time Dashboard",       color: "text-yellow-400" },
 ];
 
+interface LoginPageProps {
+  onLogin: (session: { accessToken: string; user: { id: string; email: string } }) => void;
+}
+
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [loading, setLoading] = useState(false);
