@@ -3,7 +3,7 @@ import { supabase, SERVER, publicAnonKey } from "../../lib/supabase";
 import {
   Eye, EyeOff, ShoppingCart, Lock, Mail, User, Building2,
   CheckCircle2, AlertCircle, Loader2, ArrowRight, Shield,
-  BarChart3, Receipt, Package, Zap,
+  BarChart3, Receipt, Package, Zap, KeyRound,
 } from "lucide-react";
 
 const FEATURES = [
@@ -16,7 +16,7 @@ const FEATURES = [
 ];
 
 export function LoginPage({ onLogin }: LoginPageProps) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -101,6 +101,28 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       }
     } catch (err) {
       setError(`Server error: ${err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── FORGOT PASSWORD ──────────────────────────────────────────────────────
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearMessages();
+    if (!email) { setError("Please enter your email address."); return; }
+    setLoading(true);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}`,
+      });
+      if (resetError) {
+        setError(`Failed to send reset email: ${resetError.message}`);
+      } else {
+        setSuccess("Password reset email sent! Check your inbox and follow the link to set a new password.");
+      }
+    } catch (err) {
+      setError(`Unexpected error: ${err}`);
     } finally {
       setLoading(false);
     }
@@ -191,6 +213,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           </div>
 
           {/* Tab switcher */}
+          {mode !== "forgot" && (
           <div className="flex bg-muted rounded-xl p-1 mb-8">
             <button
               onClick={() => { setMode("signin"); clearMessages(); }}
@@ -213,15 +236,18 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               Create Account
             </button>
           </div>
+          )}
 
           {/* Header */}
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
-              {mode === "signin" ? "Welcome back 👋" : "Create your account 🚀"}
+              {mode === "signin" ? "Welcome back 👋" : mode === "forgot" ? "Reset password 🔑" : "Create your account 🚀"}
             </h2>
             <p className="text-muted-foreground text-sm mt-1">
               {mode === "signin"
                 ? "Sign in to access your business dashboard"
+                : mode === "forgot"
+                ? "Enter your email and we'll send you a reset link"
                 : "Create your account — no credit card required"}
             </p>
           </div>
@@ -289,14 +315,57 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 )}
               </button>
 
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mt-2">
+              <div className="text-center space-y-1">
+                <button type="button" onClick={() => { setMode("forgot"); clearMessages(); }}
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors">
+                  Forgot your password?
+                </button>
+                <p className="text-xs text-muted-foreground">
                   Don't have an account?{" "}
                   <button type="button" onClick={() => { setMode("signup"); clearMessages(); }}
                     className="text-primary font-medium hover:underline">
                     Create one free
                   </button>
                 </p>
+              </div>
+            </form>
+          )}
+
+          {/* ── FORGOT PASSWORD FORM ── */}
+          {mode === "forgot" && (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium block mb-1.5">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => { setEmail(e.target.value); clearMessages(); }}
+                    placeholder="you@example.com"
+                    className="w-full border rounded-xl pl-10 pr-4 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {loading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" />Sending...</>
+                ) : (
+                  <><KeyRound className="h-4 w-4" />Send Reset Link</>
+                )}
+              </button>
+
+              <div className="text-center">
+                <button type="button" onClick={() => { setMode("signin"); clearMessages(); }}
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors">
+                  ← Back to sign in
+                </button>
               </div>
             </form>
           )}
