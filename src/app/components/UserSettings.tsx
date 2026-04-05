@@ -209,7 +209,7 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="phoneNumber">{t.settings.phoneNumber ?? "Phone Number"}</Label>
+                <Label htmlFor="phoneNumber">{(t.settings as any).phoneNumber ?? "Phone Number"}</Label>
                 <div className="flex gap-2">
                   <Phone className="h-5 w-5 text-muted-foreground mt-2" />
                   <Input
