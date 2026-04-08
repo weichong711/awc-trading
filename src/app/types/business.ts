@@ -29,6 +29,7 @@ export interface Order {
   discount: number; // Discount percentage (0-100) or fixed amount
   discountAmount: number; // Calculated discount amount
   total: number;
+  cashTendered?: number; // Amount given by customer
   date: Date;
   status: "completed" | "pending" | "cancelled";
 }
