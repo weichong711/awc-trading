@@ -66,6 +66,7 @@ export function OrderSummary({
     "percentage",
   );
   const [discount, setDiscount] = useState(0);
+  const [cashTendered, setCashTendered] = useState<number | "">("");
 
   // Only show products that are not hidden from orders
   const visibleProducts = products.filter((p) => p.showInOrders !== false);
@@ -156,6 +157,7 @@ export function OrderSummary({
       discount,
       discountAmount,
       total: finalTotal,
+      cashTendered: cashTendered !== "" && Number(cashTendered) > 0 ? Number(cashTendered) : undefined,
       date: new Date(),
       status: "completed",
     };
@@ -166,6 +168,7 @@ export function OrderSummary({
     setLastOrder({ ...order, id });
     setCart([]);
     setDiscount(0);
+    setCashTendered("");
     setReceiptDialogOpen(true);
   };
 
@@ -241,6 +244,18 @@ export function OrderSummary({
             <span>{t.orders.totalFinal}</span>
             <span>RM {lastOrder.total.toFixed(2)}</span>
           </div>
+          {lastOrder.cashTendered != null && lastOrder.cashTendered > 0 && (
+            <>
+              <div className="flex justify-between">
+                <span>Cash Received</span>
+                <span>RM {lastOrder.cashTendered.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-bold">
+                <span>Change</span>
+                <span>RM {(lastOrder.cashTendered - lastOrder.total).toFixed(2)}</span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="text-center text-xs border-t border-dashed border-black pt-3">
@@ -444,11 +459,35 @@ export function OrderSummary({
                   </span>
                 </div>
 
+                {/* Cash tendered */}
+                <div className="space-y-2">
+                  <Label htmlFor="cash-tendered" className="text-sm">Cash Received (RM)</Label>
+                  <Input
+                    id="cash-tendered"
+                    type="number"
+                    min={getFinalTotal()}
+                    step="0.01"
+                    value={cashTendered}
+                    onChange={(e) => setCashTendered(parseFloat(e.target.value) || "")}
+                    placeholder={`Min. RM ${getFinalTotal().toFixed(2)}`}
+                    disabled={cart.length === 0}
+                  />
+                  {cashTendered !== "" && Number(cashTendered) >= getFinalTotal() && (
+                    <div className="flex justify-between items-center text-sm font-medium text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
+                      <span>Change</span>
+                      <span>RM {(Number(cashTendered) - getFinalTotal()).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {cashTendered !== "" && Number(cashTendered) < getFinalTotal() && (
+                    <p className="text-xs text-red-500">Amount is less than total</p>
+                  )}
+                </div>
+
                 <Button
                   className="w-full"
                   size="lg"
                   onClick={handlePlaceOrder}
-                  disabled={cart.length === 0}
+                  disabled={cart.length === 0 || (cashTendered !== "" && Number(cashTendered) < getFinalTotal())}
                 >
                   <Receipt className="mr-2 h-4 w-4" />
                   {t.orders.placeOrder}
@@ -586,6 +625,18 @@ export function OrderSummary({
                   <span>{t.orders.totalFinal}</span>
                   <span>RM {lastOrder.total.toFixed(2)}</span>
                 </div>
+                {lastOrder.cashTendered != null && lastOrder.cashTendered > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span>Cash Received</span>
+                      <span>RM {lastOrder.cashTendered.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-bold text-blue-600">
+                      <span>Change</span>
+                      <span>RM {(lastOrder.cashTendered - lastOrder.total).toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="text-center text-xs border-t border-dashed pt-3">
