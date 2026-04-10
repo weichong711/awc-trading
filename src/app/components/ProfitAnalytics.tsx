@@ -544,7 +544,7 @@ export function ProfitAnalytics({
                       <TableHead>{a.dateTime}</TableHead>
                       <TableHead>{a.orderId}</TableHead>
                       <TableHead>{a.items}</TableHead>
-                      <TableHead>Payment</TableHead>
+                      <TableHead>{t.orders.payment}</TableHead>
                       <TableHead className="text-right">{a.amount}</TableHead>
                       <TableHead className="text-right">{t.common.actions}</TableHead>
                     </TableRow>
@@ -938,7 +938,7 @@ export function ProfitAnalytics({
                   <span>{new Date(selectedOrder.date).toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Time:</span>
+                  <span>{t.orders.time}</span>
                   <span>{new Date(selectedOrder.date).toLocaleTimeString()}</span>
                 </div>
               </div>
@@ -985,18 +985,18 @@ export function ProfitAnalytics({
                 </div>
                 {selectedOrder.paymentMethod && (
                   <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>Payment</span>
-                    <span className="font-medium">{selectedOrder.paymentMethod === "qr" ? "QR" : selectedOrder.paymentMethod.charAt(0).toUpperCase() + selectedOrder.paymentMethod.slice(1)}</span>
+                    <span>{t.orders.payment}</span>
+                    <span className="font-medium">{selectedOrder.paymentMethod === "qr" ? t.orders.paymentQr : selectedOrder.paymentMethod === "card" ? t.orders.paymentCard : t.orders.paymentCash}</span>
                   </div>
                 )}
                 {selectedOrder.cashTendered != null && selectedOrder.cashTendered > 0 && (
                   <>
                     <div className="flex justify-between text-sm">
-                      <span>Cash Received</span>
+                      <span>{t.orders.cashReceived}</span>
                       <span>RM {selectedOrder.cashTendered.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm font-bold text-blue-600">
-                      <span>Change</span>
+                      <span>{t.orders.change}</span>
                       <span>RM {(selectedOrder.cashTendered - selectedOrder.total).toFixed(2)}</span>
                     </div>
                   </>
