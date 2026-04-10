@@ -67,6 +67,7 @@ export function OrderSummary({
   );
   const [discount, setDiscount] = useState(0);
   const [cashTendered, setCashTendered] = useState<number | "">("");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "qr" | "card">("cash");
 
   // Only show products that are not hidden from orders
   const visibleProducts = products.filter((p) => p.showInOrders !== false);
@@ -158,6 +159,7 @@ export function OrderSummary({
       discountAmount,
       total: finalTotal,
       cashTendered: cashTendered !== "" && Number(cashTendered) > 0 ? Number(cashTendered) : undefined,
+      paymentMethod,
       date: new Date(),
       status: "completed",
     };
@@ -169,6 +171,7 @@ export function OrderSummary({
     setCart([]);
     setDiscount(0);
     setCashTendered("");
+    setPaymentMethod("cash");
     setReceiptDialogOpen(true);
   };
 
@@ -244,6 +247,12 @@ export function OrderSummary({
             <span>{t.orders.totalFinal}</span>
             <span>RM {lastOrder.total.toFixed(2)}</span>
           </div>
+          {lastOrder.paymentMethod && (
+            <div className="flex justify-between">
+              <span>Payment</span>
+              <span className="font-medium">{lastOrder.paymentMethod === "qr" ? "QR" : lastOrder.paymentMethod.charAt(0).toUpperCase() + lastOrder.paymentMethod.slice(1)}</span>
+            </div>
+          )}
           {lastOrder.cashTendered != null && lastOrder.cashTendered > 0 && (
             <>
               <div className="flex justify-between">
@@ -459,7 +468,30 @@ export function OrderSummary({
                   </span>
                 </div>
 
-                {/* Cash tendered */}
+                {/* Payment method */}
+                <div className="space-y-2">
+                  <Label className="text-sm">Payment Method</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["cash", "qr", "card"] as const).map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setPaymentMethod(method)}
+                        disabled={cart.length === 0}
+                        className={`py-2 rounded-lg border text-sm font-medium transition-all ${
+                          paymentMethod === method
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border hover:border-primary/40 text-muted-foreground"
+                        }`}
+                      >
+                        {method === "qr" ? "QR" : method.charAt(0).toUpperCase() + method.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cash tendered — only shown for cash */}
+                {paymentMethod === "cash" && (
                 <div className="space-y-2">
                   <Label htmlFor="cash-tendered" className="text-sm">Cash Received (RM)</Label>
                   <Input
@@ -482,6 +514,7 @@ export function OrderSummary({
                     <p className="text-xs text-red-500">Amount is less than total</p>
                   )}
                 </div>
+                )}
 
                 <Button
                   className="w-full"
@@ -625,6 +658,12 @@ export function OrderSummary({
                   <span>{t.orders.totalFinal}</span>
                   <span>RM {lastOrder.total.toFixed(2)}</span>
                 </div>
+                {lastOrder.paymentMethod && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Payment</span>
+                    <span className="capitalize font-medium">{lastOrder.paymentMethod === "qr" ? "QR" : lastOrder.paymentMethod.charAt(0).toUpperCase() + lastOrder.paymentMethod.slice(1)}</span>
+                  </div>
+                )}
                 {lastOrder.cashTendered != null && lastOrder.cashTendered > 0 && (
                   <>
                     <div className="flex justify-between text-sm">
