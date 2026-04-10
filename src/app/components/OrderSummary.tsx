@@ -202,7 +202,7 @@ export function OrderSummary({
             <span>{new Date(lastOrder.date).toLocaleDateString()}</span>
           </div>
           <div className="flex justify-between">
-            <span>Time:</span>
+            <span>{t.orders.time}</span>
             <span>{new Date(lastOrder.date).toLocaleTimeString()}</span>
           </div>
         </div>
@@ -249,18 +249,18 @@ export function OrderSummary({
           </div>
           {lastOrder.paymentMethod && (
             <div className="flex justify-between">
-              <span>Payment</span>
-              <span className="font-medium">{lastOrder.paymentMethod === "qr" ? "QR" : lastOrder.paymentMethod.charAt(0).toUpperCase() + lastOrder.paymentMethod.slice(1)}</span>
+              <span>{t.orders.payment}</span>
+              <span className="font-medium">{lastOrder.paymentMethod === "qr" ? t.orders.paymentQr : lastOrder.paymentMethod === "card" ? t.orders.paymentCard : t.orders.paymentCash}</span>
             </div>
           )}
           {lastOrder.cashTendered != null && lastOrder.cashTendered > 0 && (
             <>
               <div className="flex justify-between">
-                <span>Cash Received</span>
+                <span>{t.orders.cashReceived}</span>
                 <span>RM {lastOrder.cashTendered.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold">
-                <span>Change</span>
+                <span>{t.orders.change}</span>
                 <span>RM {(lastOrder.cashTendered - lastOrder.total).toFixed(2)}</span>
               </div>
             </>
@@ -615,7 +615,7 @@ export function OrderSummary({
                   <span>{new Date(lastOrder.date).toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Time:</span>
+                  <span>{t.orders.time}</span>
                   <span>{new Date(lastOrder.date).toLocaleTimeString()}</span>
                 </div>
               </div>
@@ -660,18 +660,18 @@ export function OrderSummary({
                 </div>
                 {lastOrder.paymentMethod && (
                   <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>Payment</span>
-                    <span className="capitalize font-medium">{lastOrder.paymentMethod === "qr" ? "QR" : lastOrder.paymentMethod.charAt(0).toUpperCase() + lastOrder.paymentMethod.slice(1)}</span>
+                    <span>{t.orders.payment}</span>
+                    <span className="capitalize font-medium">{lastOrder.paymentMethod === "qr" ? t.orders.paymentQr : lastOrder.paymentMethod === "card" ? t.orders.paymentCard : t.orders.paymentCash}</span>
                   </div>
                 )}
                 {lastOrder.cashTendered != null && lastOrder.cashTendered > 0 && (
                   <>
                     <div className="flex justify-between text-sm">
-                      <span>Cash Received</span>
+                      <span>{t.orders.cashReceived}</span>
                       <span>RM {lastOrder.cashTendered.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm font-bold text-blue-600">
-                      <span>Change</span>
+                      <span>{t.orders.change}</span>
                       <span>RM {(lastOrder.cashTendered - lastOrder.total).toFixed(2)}</span>
                     </div>
                   </>
