@@ -30,6 +30,7 @@ export interface Order {
   discountAmount: number; // Calculated discount amount
   total: number;
   cashTendered?: number; // Amount given by customer
+  paymentMethod?: "cash" | "qr" | "card";
   date: Date;
   status: "completed" | "pending" | "cancelled";
 }
