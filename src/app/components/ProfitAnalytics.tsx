@@ -217,6 +217,7 @@ export function ProfitAnalytics({
             .map((i) => `${i.productName} (${i.quantity} ${i.unit})`)
             .join(", "),
           amount: o.total,
+          paymentMethod: o.paymentMethod,
         })),
     [orders, txYear, txMonth],
   );
@@ -543,6 +544,7 @@ export function ProfitAnalytics({
                       <TableHead>{a.dateTime}</TableHead>
                       <TableHead>{a.orderId}</TableHead>
                       <TableHead>{a.items}</TableHead>
+                      <TableHead>Payment</TableHead>
                       <TableHead className="text-right">{a.amount}</TableHead>
                       <TableHead className="text-right">{t.common.actions}</TableHead>
                     </TableRow>
@@ -558,6 +560,21 @@ export function ProfitAnalytics({
                           <TableCell className="font-mono text-sm">#{tx.id}</TableCell>
                           <TableCell className="text-sm max-w-[220px] truncate">
                             {tx.items}
+                          </TableCell>
+                          <TableCell>
+                            {tx.paymentMethod ? (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                tx.paymentMethod === "cash"
+                                  ? "bg-green-100 text-green-700"
+                                  : tx.paymentMethod === "qr"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-purple-100 text-purple-700"
+                              }`}>
+                                {tx.paymentMethod === "qr" ? "QR" : tx.paymentMethod.charAt(0).toUpperCase() + tx.paymentMethod.slice(1)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right font-medium">
                             RM {tx.amount.toFixed(2)}
@@ -966,6 +983,24 @@ export function ProfitAnalytics({
                   <span>{t.orders.totalFinal}</span>
                   <span>RM {selectedOrder.total.toFixed(2)}</span>
                 </div>
+                {selectedOrder.paymentMethod && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Payment</span>
+                    <span className="font-medium">{selectedOrder.paymentMethod === "qr" ? "QR" : selectedOrder.paymentMethod.charAt(0).toUpperCase() + selectedOrder.paymentMethod.slice(1)}</span>
+                  </div>
+                )}
+                {selectedOrder.cashTendered != null && selectedOrder.cashTendered > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span>Cash Received</span>
+                      <span>RM {selectedOrder.cashTendered.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-bold text-blue-600">
+                      <span>Change</span>
+                      <span>RM {(selectedOrder.cashTendered - selectedOrder.total).toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="text-center text-xs border-t border-dashed pt-3">
