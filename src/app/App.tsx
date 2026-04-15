@@ -673,11 +673,32 @@ function AppContent() {
           : o,
       ),
     );
-  const handleAddProduct = (p: Omit<Product, "id">) =>
-    setProducts((prev) => [
-      ...prev,
-      { ...p, id: Date.now().toString() },
-    ]);
+  const handleAddProduct = (p: Omit<Product, "id">) => {
+    const newId = Date.now().toString();
+    setProducts((prev) => [...prev, { ...p, id: newId }]);
+
+    // ── Also create a stock item so it appears in Stock section ────────────
+    setStockItems((prev) => {
+      const exists = prev.some(
+        (s) => s.productName.toLowerCase() === p.name.toLowerCase(),
+      );
+      if (exists) return prev;
+      return [
+        {
+          id: newId + "_stock",
+          productName: p.name,
+          category: p.category || "General",
+          quantity: 0,
+          unit: p.unit,
+          costPerUnit: p.cost > 0 ? p.cost : undefined,
+          sellingPrice: p.price > 0 ? p.price : undefined,
+          addedDate: new Date(),
+          notes: "Auto-created from product",
+        },
+        ...prev,
+      ];
+    });
+  };
   const handleUpdateProduct = (
     id: string,
     p: Omit<Product, "id">,
