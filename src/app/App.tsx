@@ -780,6 +780,7 @@ function AppContent() {
     qty: number,
     reason: string,
     notes: string,
+    costPerUnit?: number,
   ) => {
     // Negative qty = top-up (add), positive = reduce
     setStockItems((prev) =>
@@ -806,6 +807,24 @@ function AppContent() {
           notes: notes || undefined,
         };
         setStockAdjustments((prevAdj) => [adj, ...prevAdj]);
+
+        // ── Auto-create expense when topping up with a cost ─────────────────
+        if (isTopUp && costPerUnit && costPerUnit > 0) {
+          const expenseId = Date.now().toString() + "_topup_exp";
+          const newExpense: Expense = {
+            id: expenseId,
+            productId: itemId,
+            productName: item.productName,
+            quantity: absQty,
+            unit: item.unit,
+            costPerUnit,
+            totalCost: costPerUnit * absQty,
+            date: new Date(),
+            notes: `Stock top-up${notes ? ": " + notes : ""}`,
+          };
+          setExpenses((prevExp) => [newExpense, ...prevExp]);
+        }
+
         return { ...item, quantity: newQty };
       }),
     );
