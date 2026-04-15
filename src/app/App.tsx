@@ -688,7 +688,7 @@ function AppContent() {
           id: newId + "_stock",
           productName: p.name,
           category: p.category || "General",
-          quantity: 0,
+          quantity: p.stock ?? 0,
           unit: p.unit,
           costPerUnit: p.cost > 0 ? p.cost : undefined,
           sellingPrice: p.price > 0 ? p.price : undefined,
@@ -698,6 +698,23 @@ function AppContent() {
         ...prev,
       ];
     });
+
+    // ── Auto-create expense if initial stock + cost are provided ───────────
+    if ((p.stock ?? 0) > 0 && p.cost > 0) {
+      const expenseId = newId + "_init_exp";
+      const newExpense: Expense = {
+        id: expenseId,
+        productId: newId,
+        productName: p.name,
+        quantity: p.stock!,
+        unit: p.unit,
+        costPerUnit: p.cost,
+        totalCost: p.cost * p.stock!,
+        date: new Date(),
+        notes: "Initial stock entry from new product",
+      };
+      setExpenses((prev) => [newExpense, ...prev]);
+    }
   };
   const handleUpdateProduct = (
     id: string,
@@ -831,9 +848,24 @@ function AppContent() {
   };
 
   const handleDeleteStock = (itemId: string) => {
-    setStockItems((prev) =>
-      prev.filter((s) => s.id !== itemId),
-    );
+    // Find the stock item before deleting so we can clean up linked expenses
+    const stockItem = stockItems.find((s) => s.id === itemId);
+    setStockItems((prev) => prev.filter((s) => s.id !== itemId));
+    setStockAdjustments((prev) => prev.filter((a) => a.stockItemId !== itemId));
+
+    // Remove expenses that were auto-created from this stock item
+    if (stockItem) {
+      setExpenses((prev) =>
+        prev.filter(
+          (e) =>
+            !(
+              e.productName.toLowerCase() === stockItem.productName.toLowerCase() &&
+              (e.notes?.startsWith("Initial stock entry") ||
+                e.notes?.startsWith("Stock top-up"))
+            ),
+        ),
+      );
+    }
   };
 
   const handleUpdateUser = async (userData: UserProfile) => {
