@@ -550,10 +550,38 @@ export function ExpenseManagement({
                 </div>
               )}
             </div>
-            {/* Hint for price/stock/unit */}
-            <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
-              <span className="mt-0.5">ℹ️</span>
-              <span>Selling price, cost, unit type and stock quantity are managed in the <strong>Stock</strong> tab → Manual Stock Entry.</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>{t.expenses.sellingPrice}</Label>
+                <Input type="number" min="0" step="0.01" value={editProduct.price}
+                  onChange={e => setEditProduct(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>{t.expenses.costPerUnit}</Label>
+                <Input type="number" min="0" step="0.01" value={editProduct.cost}
+                  onChange={e => setEditProduct(p => ({ ...p, cost: parseFloat(e.target.value) || 0 }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>{t.expenses.unitType}</Label>
+                <Select value={editProduct.unit} onValueChange={v => setEditProduct(p => ({ ...p, unit: v as UnitType }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unit">{t.units.unit}</SelectItem>
+                    <SelectItem value="kg">{t.units.kg}</SelectItem>
+                    <SelectItem value="gram">{t.units.gram}</SelectItem>
+                    <SelectItem value="liter">{t.units.liter}</SelectItem>
+                    <SelectItem value="ml">{t.units.ml}</SelectItem>
+                    <SelectItem value="piece">{t.units.piece}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>{t.expenses.initialStock}</Label>
+                <Input type="number" min="0" value={editProduct.stock}
+                  onChange={e => setEditProduct(p => ({ ...p, stock: parseFloat(e.target.value) || 0 }))} />
+              </div>
             </div>
           </div>
           <DialogFooter>
