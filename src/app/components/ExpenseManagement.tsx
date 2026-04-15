@@ -57,6 +57,7 @@ export function ExpenseManagement({
 
   const [newProduct, setNewProduct] = useState({ ...BLANK_PRODUCT });
   const [editProduct, setEditProduct] = useState({ ...BLANK_PRODUCT });
+  const [newProductError, setNewProductError] = useState("");
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleAddExpense = () => {
@@ -83,9 +84,17 @@ export function ExpenseManagement({
 
   const handleAddProduct = () => {
     if (!newProduct.name || !newProduct.category) return;
+    const isDuplicate = products.some(
+      p => p.name.trim().toLowerCase() === newProduct.name.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+      setNewProductError(`"${newProduct.name}" already exists. Please use a different name.`);
+      return;
+    }
     onAddProduct(newProduct);
     setProductDialogOpen(false);
     setNewProduct({ ...BLANK_PRODUCT });
+    setNewProductError("");
   };
 
   const handleEditProduct = () => {
@@ -380,7 +389,7 @@ export function ExpenseManagement({
       </Dialog>
 
       {/* ── Add Product Dialog ─────────────────────────────────────────────── */}
-      <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
+      <Dialog open={productDialogOpen} onOpenChange={(v) => { setProductDialogOpen(v); if (!v) { setNewProductError(""); setNewProduct({ ...BLANK_PRODUCT }); } }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t.expenses.addProductTitle}</DialogTitle>
@@ -390,8 +399,12 @@ export function ExpenseManagement({
             <div className="grid gap-2">
               <Label>{t.expenses.productName}</Label>
               <Input value={newProduct.name}
-                onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))}
-                placeholder={t.expenses.productNamePlaceholder} />
+                onChange={e => { setNewProduct(p => ({ ...p, name: e.target.value })); setNewProductError(""); }}
+                placeholder={t.expenses.productNamePlaceholder}
+                className={newProductError ? "border-red-400 focus:ring-red-200" : ""} />
+              {newProductError && (
+                <p className="text-xs text-red-500">{newProductError}</p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label>{t.expenses.category}</Label>
