@@ -126,14 +126,20 @@ export function StockManagement({
     const map = new Map<string, { avgCost: number; totalSpent: number; lastCost: number }>();
     stockItems.forEach(item => {
       const matching = expenses.filter(
-        e => e.productName.toLowerCase() === item.productName.toLowerCase()
+        e =>
+          e.productName.toLowerCase() === item.productName.toLowerCase() &&
+          e.notes !== "Initial stock entry from new product" && // exclude auto-created init expense to avoid double-counting
+          !e.notes?.startsWith("Initial stock entry") // exclude manual stock add expenses too
       );
       const totalQty = matching.reduce((sum, e) => sum + e.quantity, 0);
       const totalSpent = matching.reduce((sum, e) => sum + e.totalCost, 0);
       const lastCost = [...matching].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.costPerUnit ?? 0;
-      // Use expense-derived avg cost if available, otherwise fall back to manually entered costPerUnit
+      // Prefer manually entered costPerUnit on the stock item itself;
+      // fall back to expense-derived average only if no manual cost is set
       const avgCostFromExpenses = totalQty > 0 ? totalSpent / totalQty : 0;
-      const avgCost = avgCostFromExpenses > 0 ? avgCostFromExpenses : (item.costPerUnit ?? 0);
+      const avgCost = (item.costPerUnit ?? 0) > 0
+        ? item.costPerUnit!
+        : avgCostFromExpenses;
       map.set(item.id, { avgCost, totalSpent, lastCost });
     });
     return map;
