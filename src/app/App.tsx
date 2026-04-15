@@ -555,11 +555,41 @@ function AppContent() {
     setSyncStatus("idle");
   };
 
-  const handlePlaceOrder = (order: Omit<Order, "id">) =>
-    setOrders((prev) => [
-      { ...order, id: Date.now().toString() },
-      ...prev,
-    ]);
+  const handlePlaceOrder = (order: Omit<Order, "id">) => {
+    const orderId = Date.now().toString();
+    setOrders((prev) => [{ ...order, id: orderId }, ...prev]);
+
+    // ── Auto-reduce stock for each ordered item ─────────────────────────────
+    order.items.forEach((item) => {
+      setStockItems((prev) => {
+        const existing = prev.find(
+          (s) => s.productName.toLowerCase() === item.productName.toLowerCase(),
+        );
+        if (!existing || existing.quantity <= 0) return prev;
+
+        const reduceQty = Math.min(item.quantity, existing.quantity);
+        const newQty = existing.quantity - reduceQty;
+
+        const adj: StockAdjustment = {
+          id: Date.now().toString() + "_" + item.productId + "_adj",
+          stockItemId: existing.id,
+          productName: existing.productName,
+          adjustmentType: "reduce",
+          reason: "sold",
+          quantity: reduceQty,
+          previousQty: existing.quantity,
+          newQty,
+          date: new Date(),
+          notes: `Order #${orderId}`,
+        };
+        setStockAdjustments((prevAdj) => [adj, ...prevAdj]);
+
+        return prev.map((s) =>
+          s.id === existing.id ? { ...s, quantity: newQty } : s,
+        );
+      });
+    });
+  };
   const handleAddExpense = (expense: Omit<Expense, "id">) => {
     const newExpense = {
       ...expense,
