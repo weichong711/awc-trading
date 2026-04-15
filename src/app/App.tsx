@@ -712,6 +712,23 @@ function AppContent() {
     };
     setStockAdjustments((prev) => [adj, ...prev]);
 
+    // ── Auto-create expense record if costPerUnit is provided ───────────────
+    if (item.costPerUnit && item.costPerUnit > 0) {
+      const expenseId = Date.now().toString() + "_stock_exp";
+      const newExpense: Expense = {
+        id: expenseId,
+        productId: id,
+        productName: item.productName,
+        quantity: qty,
+        unit: item.unit,
+        costPerUnit: item.costPerUnit,
+        totalCost: item.costPerUnit * qty,
+        date: new Date(),
+        notes: `Initial stock entry${item.notes ? ": " + item.notes : ""}`,
+      };
+      setExpenses((prev) => [newExpense, ...prev]);
+    }
+
     // ── Auto-create a product in Expenses if not already there ──────────────
     setProducts((prev) => {
       const exists = prev.some(
