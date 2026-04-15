@@ -126,11 +126,13 @@ export function StockManagement({
       const matching = expenses.filter(
         e => e.productName.toLowerCase() === item.productName.toLowerCase()
       );
-      if (matching.length === 0) return;
       const totalQty = matching.reduce((sum, e) => sum + e.quantity, 0);
       const totalSpent = matching.reduce((sum, e) => sum + e.totalCost, 0);
       const lastCost = [...matching].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.costPerUnit ?? 0;
-      map.set(item.id, { avgCost: totalQty > 0 ? totalSpent / totalQty : 0, totalSpent, lastCost });
+      // Use expense-derived avg cost if available, otherwise fall back to manually entered costPerUnit
+      const avgCostFromExpenses = totalQty > 0 ? totalSpent / totalQty : 0;
+      const avgCost = avgCostFromExpenses > 0 ? avgCostFromExpenses : (item.costPerUnit ?? 0);
+      map.set(item.id, { avgCost, totalSpent, lastCost });
     });
     return map;
   }, [stockItems, expenses]);
