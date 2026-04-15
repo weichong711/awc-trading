@@ -72,7 +72,7 @@ interface StockManagementProps {
   stockAdjustments: StockAdjustment[];
   expenses: Expense[];
   onAddStock: (item: Omit<StockItem, "id" | "addedDate">, qty: number) => void;
-  onReduceStock: (itemId: string, qty: number, reason: string, notes: string) => void;
+  onReduceStock: (itemId: string, qty: number, reason: string, notes: string, costPerUnit?: number) => void;
   onDeleteStock: (itemId: string) => void;
 }
 interface AddStockForm {
@@ -116,6 +116,7 @@ export function StockManagement({
   const [topUpItem, setTopUpItem] = useState<StockItem | null>(null);
   const [topUpQty, setTopUpQty] = useState("");
   const [topUpNotes, setTopUpNotes] = useState("");
+  const [topUpCost, setTopUpCost] = useState("");
 
   const [reduceOpen, setReduceOpen] = useState(false);
   const [reduceItem, setReduceItem] = useState<StockItem | null>(null);
@@ -202,8 +203,9 @@ export function StockManagement({
 
   const handleTopUpSubmit = () => {
     if (!topUpItem || !topUpQty || parseFloat(topUpQty) <= 0) return;
-    onReduceStock(topUpItem.id, -Math.abs(parseFloat(topUpQty)), "received", topUpNotes);
-    setTopUpOpen(false); setTopUpQty(""); setTopUpNotes(""); setTopUpItem(null);
+    const cost = topUpCost ? parseFloat(topUpCost) : undefined;
+    onReduceStock(topUpItem.id, -Math.abs(parseFloat(topUpQty)), "received", topUpNotes, cost);
+    setTopUpOpen(false); setTopUpQty(""); setTopUpNotes(""); setTopUpCost(""); setTopUpItem(null);
   };
 
   const handleReduceSubmit = () => {
@@ -214,7 +216,7 @@ export function StockManagement({
   };
 
   const openReduce = (item: StockItem) => { setReduceItem(item); setReduceForm({ quantity: "", reason: "sold", notes: "" }); setReduceOpen(true); };
-  const openTopUp  = (item: StockItem) => { setTopUpItem(item); setTopUpQty(""); setTopUpNotes(""); setTopUpOpen(true); };
+  const openTopUp  = (item: StockItem) => { setTopUpItem(item); setTopUpQty(""); setTopUpNotes(""); setTopUpCost(""); setTopUpOpen(true); };
 
   const alertItems = stockItems.filter(i => ["expired", "expiring_soon", "out"].includes(getStockStatus(i)));
   const getReasonLabel = (reason: string) =>
@@ -614,12 +616,20 @@ export function StockManagement({
               <Input type="number" min="0.01" step="0.01" placeholder="0" value={topUpQty} onChange={e => setTopUpQty(e.target.value)} autoFocus />
             </div>
             <div className="space-y-1">
+              <label className="text-sm font-medium">Cost Per Unit (RM) <span className="text-muted-foreground font-normal">({s.optional})</span></label>
+              <Input type="number" min="0" step="0.01" placeholder="0.00" value={topUpCost} onChange={e => setTopUpCost(e.target.value)} />
+              <p className="text-xs text-muted-foreground">If entered, this top-up will be recorded as an expense in Analytics.</p>
+            </div>
+            <div className="space-y-1">
               <label className="text-sm font-medium">{s.notes} <span className="text-muted-foreground font-normal">({s.optional})</span></label>
               <Input placeholder={s.topUpNotesPH} value={topUpNotes} onChange={e => setTopUpNotes(e.target.value)} />
             </div>
             {topUpQty && parseFloat(topUpQty) > 0 && topUpItem && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm">
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm space-y-0.5">
                 <p className="text-green-700">{s.afterTopUp} <strong>{(topUpItem.quantity + parseFloat(topUpQty)).toFixed(2)} {topUpItem.unit}</strong></p>
+                {topUpCost && parseFloat(topUpCost) > 0 && (
+                  <p className="text-green-700">Expense: <strong>RM {(parseFloat(topUpQty) * parseFloat(topUpCost)).toFixed(2)}</strong></p>
+                )}
               </div>
             )}
           </div>
