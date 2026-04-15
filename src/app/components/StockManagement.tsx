@@ -110,6 +110,7 @@ export function StockManagement({
     productName: "", category: "", quantity: "", unit: "unit",
     sellingPrice: "", costPerUnit: "", expiryDate: "", notes: "",
   });
+  const [addFormError, setAddFormError] = useState("");
 
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [topUpItem, setTopUpItem] = useState<StockItem | null>(null);
@@ -177,6 +178,13 @@ export function StockManagement({
 
   const handleAddSubmit = () => {
     if (!addForm.productName.trim() || !addForm.quantity || parseFloat(addForm.quantity) <= 0) return;
+    const isDuplicate = stockItems.some(
+      s => s.productName.trim().toLowerCase() === addForm.productName.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+      setAddFormError(`"${addForm.productName.trim()}" already exists in stock. Use the + button to top up instead.`);
+      return;
+    }
     onAddStock({
       productName: addForm.productName.trim(),
       category:    addForm.category.trim() || "General",
@@ -188,6 +196,7 @@ export function StockManagement({
       notes:       addForm.notes.trim() || undefined,
     }, parseFloat(addForm.quantity));
     setAddForm({ productName: "", category: "", quantity: "", unit: "unit", sellingPrice: "", costPerUnit: "", expiryDate: "", notes: "" });
+    setAddFormError("");
     setAddOpen(false);
   };
 
@@ -525,7 +534,7 @@ export function StockManagement({
       </Card>
 
       {/* Add Stock Dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={addOpen} onOpenChange={(v) => { setAddOpen(v); if (!v) { setAddFormError(""); setAddForm({ productName: "", category: "", quantity: "", unit: "unit", sellingPrice: "", costPerUnit: "", expiryDate: "", notes: "" }); } }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Plus className="h-5 w-5 text-primary" />{s.addTitle}</DialogTitle>
@@ -535,7 +544,10 @@ export function StockManagement({
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-1">
                 <label className="text-sm font-medium">{s.productName}</label>
-                <Input placeholder={s.productNamePH} value={addForm.productName} onChange={e => setAddForm(f => ({ ...f, productName: e.target.value }))} />
+                <Input placeholder={s.productNamePH} value={addForm.productName}
+                  onChange={e => { setAddForm(f => ({ ...f, productName: e.target.value })); setAddFormError(""); }}
+                  className={addFormError ? "border-red-400 focus:ring-red-200" : ""} />
+                {addFormError && <p className="text-xs text-red-500">{addFormError}</p>}
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">{s.category}</label>
