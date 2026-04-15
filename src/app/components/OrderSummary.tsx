@@ -57,6 +57,7 @@ export function OrderSummary({
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedUnit, setSelectedUnit] = useState<UnitType>("unit");
+  const [customPrice, setCustomPrice] = useState<number>(0);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
@@ -77,6 +78,7 @@ export function OrderSummary({
     setSelectedProduct(product);
     setSelectedUnit(product.unit);
     setQuantity(1);
+    setCustomPrice(product.price);
     setDialogOpen(true);
   };
 
@@ -95,7 +97,7 @@ export function OrderSummary({
             ? {
                 ...item,
                 quantity: item.quantity + quantity,
-                total: (item.quantity + quantity) * item.price,
+                total: (item.quantity + quantity) * customPrice,
               }
             : item,
         ),
@@ -106,8 +108,8 @@ export function OrderSummary({
         productName: selectedProduct.name,
         quantity,
         unit: selectedUnit,
-        price: selectedProduct.price,
-        total: selectedProduct.price * quantity,
+        price: customPrice,
+        total: customPrice * quantity,
       };
       setCart([...cart, newItem]);
     }
@@ -555,6 +557,28 @@ export function OrderSummary({
             </div>
 
             <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Price (RM)</Label>
+                {customPrice !== selectedProduct?.price && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomPrice(selectedProduct?.price || 0)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Reset to default (RM {selectedProduct?.price.toFixed(2)})
+                  </button>
+                )}
+              </div>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={customPrice}
+                onChange={(e) => setCustomPrice(parseFloat(e.target.value) || 0)}
+              />
+            </div>
+
+            <div className="grid gap-2">
               <Label>{t.common.unit}</Label>
               <Select
                 value={selectedUnit}
@@ -577,7 +601,7 @@ export function OrderSummary({
             <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
               <span>{t.orders.totalLabel}</span>
               <span className="text-xl font-medium">
-                RM {(quantity * (selectedProduct?.price || 0)).toFixed(2)}
+                RM {(quantity * customPrice).toFixed(2)}
               </span>
             </div>
           </div>
