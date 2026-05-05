@@ -1,23 +1,28 @@
 import { useState, useMemo } from "react";
 import {
-  Package2, Plus, Trash2, AlertTriangle, CheckCircle2,
-  Clock, XCircle, TrendingDown, DollarSign, Edit3,
-  ArrowUpCircle, ArrowDownCircle, History, ChevronDown, ChevronUp, BarChart3,
+  Package2, Plus, Minus, Trash2, AlertTriangle, CheckCircle2,
+  Clock, XCircle, ChevronDown, ChevronUp, Search, History,
+  RefreshCw, ArrowDownCircle, ArrowUpCircle, Link2, TrendingDown,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
-import { Textarea } from "./ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "./ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "./ui/alert-dialog";
 import { StockItem, StockAdjustment, UnitType, Expense } from "../types/business";
 import { useLanguage } from "../contexts/LanguageContext";
 
 const UNITS: UnitType[] = ["unit", "kg", "gram", "liter", "ml", "piece"];
 const LOW_STOCK_THRESHOLD = 10;
-const HISTORY_LIMIT = 15;
 
 function getStockStatus(item: StockItem) {
   const today = new Date();
@@ -34,6 +39,34 @@ function getStockStatus(item: StockItem) {
   return "good";
 }
 
+function daysUntilExpiry(dateStr: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const exp = new Date(dateStr);
+  exp.setHours(0, 0, 0, 0);
+  return Math.ceil((exp.getTime() - today.getTime()) / 86400000);
+}
+
+interface StatusBadgeProps {
+  status: string;
+  labels: { good: string; low: string; out: string; expiringSoon: string; expired: string };
+}
+function StatusBadge({ status, labels }: StatusBadgeProps) {
+  const cfg: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
+    good:          { label: labels.good,         className: "bg-green-100 text-green-700 border-green-200",    icon: <CheckCircle2 className="h-3 w-3" /> },
+    low:           { label: labels.low,          className: "bg-amber-100 text-amber-700 border-amber-200",    icon: <AlertTriangle className="h-3 w-3" /> },
+    out:           { label: labels.out,          className: "bg-red-100 text-red-700 border-red-200",          icon: <XCircle className="h-3 w-3" /> },
+    expiring_soon: { label: labels.expiringSoon, className: "bg-orange-100 text-orange-700 border-orange-200", icon: <Clock className="h-3 w-3" /> },
+    expired:       { label: labels.expired,      className: "bg-red-200 text-red-800 border-red-300",          icon: <XCircle className="h-3 w-3" /> },
+  };
+  const c = cfg[status] || cfg.good;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${c.className}`}>
+      {c.icon}{c.label}
+    </span>
+  );
+}
+
 interface StockManagementProps {
   stockItems: StockItem[];
   stockAdjustments: StockAdjustment[];
@@ -42,30 +75,36 @@ interface StockManagementProps {
   onReduceStock: (itemId: string, qty: number, reason: string, notes: string, costPerUnit?: number) => void;
   onDeleteStock: (itemId: string) => void;
 }
-
 interface AddStockForm {
-  productName: string;
-  category: string;
-  quantity: string;
-  unit: UnitType;
-  sellingPrice: string;
-  costPerUnit: string;
-  expiryDate: string;
-  notes: string;
+  productName: string; category: string; quantity: string; unit: UnitType;
+  sellingPrice: string; costPerUnit: string; expiryDate: string; notes: string;
 }
+interface ReduceForm { quantity: string; reason: string; notes: string; }
 
 export function StockManagement({
-  stockItems,
-  stockAdjustments,
-  expenses,
-  onAddStock,
-  onReduceStock,
-  onDeleteStock,
+  stockItems, stockAdjustments, expenses, onAddStock, onReduceStock, onDeleteStock,
 }: StockManagementProps) {
   const { t } = useLanguage();
   const s = t.stock;
 
-  // ── Dialog state ──────────────────────────────────────────────────────────
+  const REDUCE_REASONS = [
+    { value: "sold",       label: s.reasonSold },
+    { value: "expired",    label: s.reasonExpired },
+    { value: "broken",     label: s.reasonBroken },
+    { value: "returned",   label: s.reasonReturned },
+    { value: "adjustment", label: s.reasonAdjustment },
+  ];
+
+  const statusLabels = {
+    good: s.statusGood, low: s.statusLow, out: s.statusOut,
+    expiringSoon: s.statusExpiringSoon, expired: s.statusExpired,
+  };
+
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyShowAll, setHistoryShowAll] = useState(false);
+
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState<AddStockForm>({
     productName: "", category: "", quantity: "", unit: "unit",
@@ -73,151 +112,122 @@ export function StockManagement({
   });
   const [addFormError, setAddFormError] = useState("");
 
-  // Manage dialog (top-up OR set quantity)
-  const [manageOpen, setManageOpen] = useState(false);
-  const [manageItem, setManageItem] = useState<StockItem | null>(null);
-  const [manageTab, setManageTab] = useState<"topup" | "set">("topup");
+  const [topUpOpen, setTopUpOpen] = useState(false);
+  const [topUpItem, setTopUpItem] = useState<StockItem | null>(null);
   const [topUpQty, setTopUpQty] = useState("");
-  const [topUpCost, setTopUpCost] = useState("");
   const [topUpNotes, setTopUpNotes] = useState("");
-  const [setQtyVal, setSetQtyVal] = useState("");
-  const [setQtyNotes, setSetQtyNotes] = useState("");
+  const [topUpCost, setTopUpCost] = useState("");
 
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<StockItem | null>(null);
+  const [reduceOpen, setReduceOpen] = useState(false);
+  const [reduceItem, setReduceItem] = useState<StockItem | null>(null);
+  const [reduceForm, setReduceForm] = useState<ReduceForm>({ quantity: "", reason: "sold", notes: "" });
 
-  const [showHistory, setShowHistory] = useState(false);
-  const [historyShowAll, setHistoryShowAll] = useState(false);
-
-  // ── Cost map ──────────────────────────────────────────────────────────────
   const costMap = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, { avgCost: number; totalSpent: number; lastCost: number }>();
     stockItems.forEach(item => {
-      if ((item.costPerUnit ?? 0) > 0) { map.set(item.id, item.costPerUnit!); return; }
       const matching = expenses.filter(
-        e => e.productName.toLowerCase() === item.productName.toLowerCase() &&
-          !e.notes?.startsWith("Initial stock entry") &&
-          e.notes !== "Initial stock entry from new product"
+        e =>
+          e.productName.toLowerCase() === item.productName.toLowerCase() &&
+          e.notes !== "Initial stock entry from new product" && // exclude auto-created init expense to avoid double-counting
+          !e.notes?.startsWith("Initial stock entry") // exclude manual stock add expenses too
       );
       const totalQty = matching.reduce((sum, e) => sum + e.quantity, 0);
       const totalSpent = matching.reduce((sum, e) => sum + e.totalCost, 0);
-      map.set(item.id, totalQty > 0 ? totalSpent / totalQty : 0);
+      const lastCost = [...matching].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.costPerUnit ?? 0;
+      // Prefer manually entered costPerUnit on the stock item itself;
+      // fall back to expense-derived average only if no manual cost is set
+      const avgCostFromExpenses = totalQty > 0 ? totalSpent / totalQty : 0;
+      const avgCost = (item.costPerUnit ?? 0) > 0
+        ? item.costPerUnit!
+        : avgCostFromExpenses;
+      map.set(item.id, { avgCost, totalSpent, lastCost });
     });
     return map;
   }, [stockItems, expenses]);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
+  const totalStockValue = useMemo(() =>
+    stockItems.reduce((sum, item) => sum + item.quantity * (costMap.get(item.id)?.avgCost ?? 0), 0),
+    [stockItems, costMap]
+  );
+
   const stats = useMemo(() => {
     const statuses = stockItems.map(getStockStatus);
-    const totalValue = stockItems.reduce(
-      (sum, item) => sum + item.quantity * (costMap.get(item.id) ?? 0), 0
-    );
-    const totalTopUps = stockAdjustments.filter(a => a.adjustmentType === "add").length;
-    const totalReductions = stockAdjustments.filter(a => a.adjustmentType === "reduce").length;
-    const totalTopUpQty = stockAdjustments
-      .filter(a => a.adjustmentType === "add")
-      .reduce((sum, a) => sum + a.quantity, 0);
     return {
       total: stockItems.length,
-      good: statuses.filter(st => st === "good").length,
-      low: statuses.filter(st => st === "low").length,
-      out: statuses.filter(st => st === "out").length,
-      expiringSoon: statuses.filter(st => st === "expiring_soon").length,
-      expired: statuses.filter(st => st === "expired").length,
-      totalValue,
-      totalTopUps,
-      totalReductions,
-      totalTopUpQty,
+      good: statuses.filter(s => s === "good").length,
+      low: statuses.filter(s => s === "low").length,
+      out: statuses.filter(s => s === "out").length,
+      expiringSoon: statuses.filter(s => s === "expiring_soon").length,
+      expired: statuses.filter(s => s === "expired").length,
     };
-  }, [stockItems, stockAdjustments, costMap]);
+  }, [stockItems]);
 
-  // ── Sorted history ────────────────────────────────────────────────────────
+  const filtered = useMemo(() =>
+    stockItems
+      .filter(item => {
+        const matchSearch = item.productName.toLowerCase().includes(search.toLowerCase()) ||
+          item.category.toLowerCase().includes(search.toLowerCase());
+        const status = getStockStatus(item);
+        return matchSearch && (filterStatus === "all" || status === filterStatus);
+      })
+      .sort((a, b) => {
+        const order: Record<string, number> = { expired: 0, expiring_soon: 1, out: 2, low: 3, good: 4 };
+        return (order[getStockStatus(a)] ?? 5) - (order[getStockStatus(b)] ?? 5);
+      }),
+    [stockItems, search, filterStatus]
+  );
+
   const sortedHistory = useMemo(() =>
     [...stockAdjustments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [stockAdjustments]
   );
-
-  // ── Status config ─────────────────────────────────────────────────────────
-  const statusConfig: Record<string, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
-    good:          { label: s.statusGood,         color: "text-green-700",  bg: "bg-green-50",  border: "border-green-200",  icon: <CheckCircle2 className="h-3 w-3" /> },
-    low:           { label: s.statusLow,          color: "text-amber-700",  bg: "bg-amber-50",  border: "border-amber-200",  icon: <AlertTriangle className="h-3 w-3" /> },
-    out:           { label: s.statusOut,          color: "text-red-700",    bg: "bg-red-50",    border: "border-red-200",    icon: <XCircle className="h-3 w-3" /> },
-    expiring_soon: { label: s.statusExpiringSoon, color: "text-orange-700", bg: "bg-orange-50", border: "border-orange-200", icon: <Clock className="h-3 w-3" /> },
-    expired:       { label: s.statusExpired,      color: "text-red-800",    bg: "bg-red-100",   border: "border-red-300",    icon: <XCircle className="h-3 w-3" /> },
-  };
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  const resetManage = () => {
-    setManageItem(null);
-    setManageTab("topup");
-    setTopUpQty(""); setTopUpCost(""); setTopUpNotes("");
-    setSetQtyVal(""); setSetQtyNotes("");
-  };
-
-  const openManage = (item: StockItem) => {
-    resetManage();
-    setManageItem(item);
-    setSetQtyVal(String(item.quantity));
-    setManageOpen(true);
-  };
-
-  const handleTopUpSubmit = () => {
-    if (!manageItem || !topUpQty || parseFloat(topUpQty) <= 0) return;
-    const cost = topUpCost ? parseFloat(topUpCost) : undefined;
-    onReduceStock(manageItem.id, -Math.abs(parseFloat(topUpQty)), "received", topUpNotes, cost);
-    setManageOpen(false);
-    resetManage();
-  };
-
-  const handleSetQtySubmit = () => {
-    if (!manageItem || setQtyVal === "" || parseFloat(setQtyVal) < 0) return;
-    const newQty = parseFloat(setQtyVal);
-    const diff = newQty - manageItem.quantity;
-    if (diff === 0) { setManageOpen(false); resetManage(); return; }
-    onReduceStock(
-      manageItem.id,
-      diff > 0 ? -diff : Math.abs(diff),
-      diff > 0 ? "received" : "adjustment",
-      setQtyNotes || "Manual quantity update"
-    );
-    setManageOpen(false);
-    resetManage();
-  };
+  const HISTORY_LIMIT = 20;
 
   const handleAddSubmit = () => {
     if (!addForm.productName.trim() || !addForm.quantity || parseFloat(addForm.quantity) <= 0) return;
     const isDuplicate = stockItems.some(
-      i => i.productName.trim().toLowerCase() === addForm.productName.trim().toLowerCase()
+      s => s.productName.trim().toLowerCase() === addForm.productName.trim().toLowerCase()
     );
     if (isDuplicate) {
-      setAddFormError(`"${addForm.productName.trim()}" already exists. Click its card to top up.`);
+      setAddFormError(`"${addForm.productName.trim()}" already exists in stock. Use the + button to top up instead.`);
       return;
     }
     onAddStock({
       productName: addForm.productName.trim(),
-      category: addForm.category.trim() || "General",
-      quantity: parseFloat(addForm.quantity),
-      unit: addForm.unit,
+      category:    addForm.category.trim() || "General",
+      quantity:    parseFloat(addForm.quantity),
+      unit:        addForm.unit,
       sellingPrice: addForm.sellingPrice ? parseFloat(addForm.sellingPrice) : undefined,
-      costPerUnit: addForm.costPerUnit ? parseFloat(addForm.costPerUnit) : undefined,
-      expiryDate: addForm.expiryDate || undefined,
-      notes: addForm.notes.trim() || undefined,
+      costPerUnit:  addForm.costPerUnit ? parseFloat(addForm.costPerUnit) : undefined,
+      expiryDate:  addForm.expiryDate || undefined,
+      notes:       addForm.notes.trim() || undefined,
     }, parseFloat(addForm.quantity));
     setAddForm({ productName: "", category: "", quantity: "", unit: "unit", sellingPrice: "", costPerUnit: "", expiryDate: "", notes: "" });
     setAddFormError("");
     setAddOpen(false);
   };
 
-  const reasonLabel = (reason: string) => {
-    const map: Record<string, string> = {
-      received: s.reasonReceived, sold: s.reasonSold, expired: s.reasonExpired,
-      broken: s.reasonBroken, returned: s.reasonReturned, adjustment: s.reasonAdjustment,
-      initial: "Initial",
-    };
-    return map[reason] || reason;
+  const handleTopUpSubmit = () => {
+    if (!topUpItem || !topUpQty || parseFloat(topUpQty) <= 0) return;
+    const cost = topUpCost ? parseFloat(topUpCost) : undefined;
+    onReduceStock(topUpItem.id, -Math.abs(parseFloat(topUpQty)), "received", topUpNotes, cost);
+    setTopUpOpen(false); setTopUpQty(""); setTopUpNotes(""); setTopUpCost(""); setTopUpItem(null);
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const handleReduceSubmit = () => {
+    if (!reduceItem || !reduceForm.quantity || parseFloat(reduceForm.quantity) <= 0) return;
+    const qty = Math.min(parseFloat(reduceForm.quantity), reduceItem.quantity);
+    onReduceStock(reduceItem.id, qty, reduceForm.reason, reduceForm.notes);
+    setReduceOpen(false); setReduceForm({ quantity: "", reason: "sold", notes: "" }); setReduceItem(null);
+  };
+
+  const openReduce = (item: StockItem) => { setReduceItem(item); setReduceForm({ quantity: "", reason: "sold", notes: "" }); setReduceOpen(true); };
+  const openTopUp  = (item: StockItem) => { setTopUpItem(item); setTopUpQty(""); setTopUpNotes(""); setTopUpCost(""); setTopUpOpen(true); };
+
+  const alertItems = stockItems.filter(i => ["expired", "expiring_soon", "out"].includes(getStockStatus(i)));
+  const getReasonLabel = (reason: string) =>
+    reason === "received" ? s.reasonReceived : (REDUCE_REASONS.find(r => r.value === reason)?.label || reason);
+
   return (
     <div className="space-y-6">
 
@@ -234,91 +244,204 @@ export function StockManagement({
         </Button>
       </div>
 
+      {/* Info banner */}
+      <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+        <Link2 className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-600" />
+        <div>
+          <strong>{s.linkedBanner}</strong>{" "}
+          <Minus className="h-3.5 w-3.5 inline mx-0.5" /> {s.linkedBanner2}
+        </div>
+      </div>
+
       {/* Stat cards */}
       <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         {[
-          { label: s.totalItems,   value: stats.total,               color: "text-foreground", bg: "bg-muted/40",  icon: <Package2 className="h-4 w-4 text-muted-foreground" />, isMoney: false },
-          { label: s.good,         value: stats.good,                color: "text-green-700",  bg: "bg-green-50",  icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,   isMoney: false },
-          { label: s.lowStock,     value: stats.low,                 color: "text-amber-700",  bg: "bg-amber-50",  icon: <AlertTriangle className="h-4 w-4 text-amber-500" />,  isMoney: false },
-          { label: s.expiringSoon, value: stats.expiringSoon,        color: "text-orange-700", bg: "bg-orange-50", icon: <Clock className="h-4 w-4 text-orange-500" />,         isMoney: false },
-          { label: s.expiredOut,   value: stats.expired + stats.out, color: "text-red-700",    bg: "bg-red-50",    icon: <XCircle className="h-4 w-4 text-red-500" />,          isMoney: false },
-          { label: s.stockValue,   value: stats.totalValue,          color: "text-primary",    bg: "bg-primary/5", icon: <TrendingDown className="h-4 w-4 text-primary" />,      isMoney: true  },
+          { label: s.totalItems,   value: stats.total,               color: "text-foreground",  bg: "bg-muted/40",  icon: <Package2 className="h-4 w-4 text-muted-foreground" />, filter: "all",           isCount: true },
+          { label: s.good,         value: stats.good,                color: "text-green-700",   bg: "bg-green-50",  icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,   filter: "good",          isCount: true },
+          { label: s.lowStock,     value: stats.low,                 color: "text-amber-700",   bg: "bg-amber-50",  icon: <AlertTriangle className="h-4 w-4 text-amber-500" />,  filter: "low",           isCount: true },
+          { label: s.expiringSoon, value: stats.expiringSoon,        color: "text-orange-700",  bg: "bg-orange-50", icon: <Clock className="h-4 w-4 text-orange-500" />,         filter: "expiring_soon", isCount: true },
+          { label: s.expiredOut,   value: stats.expired + stats.out, color: "text-red-700",     bg: "bg-red-50",    icon: <XCircle className="h-4 w-4 text-red-500" />,          filter: "expired",       isCount: true },
+          { label: s.stockValue,   value: totalStockValue,           color: "text-primary",     bg: "bg-primary/5", icon: <TrendingDown className="h-4 w-4 text-primary" />,      filter: null,            isCount: false },
         ].map(card => (
-          <Card key={card.label} className={card.bg}>
+          <Card key={card.label}
+            className={`transition-all ${card.filter ? "cursor-pointer hover:shadow-md" : ""} ${filterStatus === card.filter ? "ring-2 ring-primary" : ""} ${card.bg}`}
+            onClick={() => card.filter && setFilterStatus(filterStatus === card.filter ? "all" : card.filter)}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs text-muted-foreground">{card.label}</span>
                 {card.icon}
               </div>
               <div className={`text-2xl font-bold ${card.color}`}>
-                {card.isMoney ? `RM ${(card.value as number).toFixed(2)}` : card.value}
+                {card.isCount ? card.value : `RM ${(card.value as number).toFixed(2)}`}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Summary Report */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="h-4 w-4 text-primary" />Stock Summary Report
-          </CardTitle>
-          <CardDescription>Overview of all stock movements</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-center">
-              <p className="text-xs text-blue-600 font-medium">Total Products</p>
-              <p className="text-2xl font-bold text-blue-700">{stats.total}</p>
-            </div>
-            <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-center">
-              <p className="text-xs text-green-600 font-medium">Total Top-Ups</p>
-              <p className="text-2xl font-bold text-green-700">{stats.totalTopUps}</p>
-              <p className="text-xs text-green-600">{stats.totalTopUpQty} units added</p>
-            </div>
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-center">
-              <p className="text-xs text-red-600 font-medium">Total Reductions</p>
-              <p className="text-2xl font-bold text-red-700">{stats.totalReductions}</p>
-            </div>
-            <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl text-center">
-              <p className="text-xs text-primary font-medium">Stock Value</p>
-              <p className="text-xl font-bold text-primary">RM {stats.totalValue.toFixed(2)}</p>
-            </div>
+      {/* Alert banner */}
+      {alertItems.length > 0 && (
+        <div className="border border-red-200 bg-red-50 rounded-xl p-4 space-y-2">
+          <div className="flex items-center gap-2 text-red-700 font-semibold text-sm">
+            <AlertTriangle className="h-4 w-4" />
+            {alertItems.length} {s.needAttention}
           </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {alertItems.map(item => {
+              const status = getStockStatus(item);
+              const days = item.expiryDate ? daysUntilExpiry(item.expiryDate) : 0;
+              return (
+                <div key={item.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-red-200 text-sm">
+                  <div>
+                    <p className="font-medium text-sm">{item.productName}</p>
+                    {status === "expiring_soon" && item.expiryDate && (
+                      <p className="text-xs text-orange-600">{s.expiresIn} {days} {days !== 1 ? s.days : s.day}</p>
+                    )}
+                    {status === "expired" && <p className="text-xs text-red-600">{s.expiredReduceNow}</p>}
+                    {status === "out" && <p className="text-xs text-red-600">{s.outOfStock}</p>}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <StatusBadge status={status} labels={statusLabels} />
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-600" onClick={() => openReduce(item)}>
+                      <Minus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-          {/* Per-product breakdown */}
-          {stockItems.length > 0 && (
-            <div className="mt-4 border rounded-xl overflow-hidden">
+      {/* Search + filter */}
+      <div className="flex flex-wrap gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input className="pl-9" placeholder={s.searchPlaceholder} value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{s.allStatus}</SelectItem>
+            <SelectItem value="good">{s.statusGood}</SelectItem>
+            <SelectItem value="low">{s.statusLow}</SelectItem>
+            <SelectItem value="expiring_soon">{s.statusExpiringSoon}</SelectItem>
+            <SelectItem value="expired">{s.statusExpired}</SelectItem>
+            <SelectItem value="out">{s.statusOut}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Stock Table */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{s.stockInventory}</CardTitle>
+          <CardDescription>{filtered.length} {s.itemsShown}</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Package2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">{s.noStockFound}</p>
+              <p className="text-sm mt-1">{s.noStockDesc}</p>
+              <Button className="mt-4" onClick={() => setAddOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />{s.addStockItem}
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/40">
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-center">Qty</TableHead>
-                    <TableHead className="text-right">Cost/Unit</TableHead>
-                    <TableHead className="text-right">Stock Value</TableHead>
-                    <TableHead>Status</TableHead>
+                  <TableRow>
+                    <TableHead>{s.colProduct}</TableHead>
+                    <TableHead>{s.colCategory}</TableHead>
+                    <TableHead className="text-center">{s.colQty}</TableHead>
+                    <TableHead className="text-right">{s.colAvgCost}</TableHead>
+                    <TableHead className="text-right">{s.colStockValue}</TableHead>
+                    <TableHead>{s.colExpiry}</TableHead>
+                    <TableHead>{s.colStatus}</TableHead>
+                    <TableHead className="text-right">{s.colActions}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stockItems.map(item => {
+                  {filtered.map(item => {
                     const status = getStockStatus(item);
-                    const cfg = statusConfig[status] ?? statusConfig.good;
-                    const avgCost = costMap.get(item.id) ?? 0;
+                    const avgCost = costMap.get(item.id)?.avgCost ?? 0;
                     const stockValue = item.quantity * avgCost;
+                    const isExpenseLinked = item.category === "Expense-linked" ||
+                      expenses.some(e => e.productName.toLowerCase() === item.productName.toLowerCase());
+                    const expDays = item.expiryDate ? daysUntilExpiry(item.expiryDate) : 0;
                     return (
-                      <TableRow key={item.id}>
+                      <TableRow key={item.id} className={status === "expired" ? "bg-red-50/50" : status === "expiring_soon" ? "bg-orange-50/30" : ""}>
                         <TableCell>
-                          <p className="font-medium text-sm">{item.productName}</p>
-                          <p className="text-xs text-muted-foreground">{item.category}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium">{item.productName}</p>
+                            {isExpenseLinked && (
+                              <span className="inline-flex items-center gap-0.5 text-xs text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full">
+                                <Link2 className="h-2.5 w-2.5" />{s.expenseLinked}
+                              </span>
+                            )}
+                          </div>
+                          {item.notes && item.notes !== "Auto-created from expense" && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[180px]">{item.notes}</p>
+                          )}
                         </TableCell>
-                        <TableCell className="text-center font-bold">{item.quantity} <span className="text-xs font-normal text-muted-foreground">{item.unit}</span></TableCell>
-                        <TableCell className="text-right text-sm">{avgCost > 0 ? `RM ${avgCost.toFixed(2)}` : "—"}</TableCell>
-                        <TableCell className="text-right font-semibold text-primary">{stockValue > 0 ? `RM ${stockValue.toFixed(2)}` : "—"}</TableCell>
                         <TableCell>
-                          <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.color} ${cfg.bg} ${cfg.border}`}>
-                            {cfg.icon}{cfg.label}
+                          <Badge variant="outline" className="text-xs">{item.category}</Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={`font-bold text-base ${item.quantity === 0 ? "text-red-600" : item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" : "text-foreground"}`}>
+                            {item.quantity}
                           </span>
+                          <span className="text-xs text-muted-foreground ml-1">{item.unit}</span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {avgCost > 0 ? <span className="text-sm font-medium">RM {avgCost.toFixed(2)}</span> : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {stockValue > 0 ? <span className="text-sm font-semibold text-primary">RM {stockValue.toFixed(2)}</span> : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          {item.expiryDate ? (
+                            <div>
+                              <p className={`text-sm font-medium ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : "text-foreground"}`}>
+                                {new Date(item.expiryDate).toLocaleDateString()}
+                              </p>
+                              {status === "expiring_soon" && <p className="text-xs text-orange-500">{expDays}{s.dLeft}</p>}
+                              {status === "expired" && <p className="text-xs text-red-500">{Math.abs(expDays)}{s.dAgo}</p>}
+                            </div>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell><StatusBadge status={status} labels={statusLabels} /></TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" title={s.topUp} className="text-green-600 hover:text-green-700 hover:bg-green-50 h-8 w-8 p-0" onClick={() => openTopUp(item)}>
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" title={s.reduceTitle} className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0" onClick={() => openReduce(item)} disabled={item.quantity === 0}>
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>{s.deleteTitle}</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {item.productName} — {s.deleteDesc}
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+                                  <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => onDeleteStock(item.id)}>{t.common.delete}</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -330,112 +453,10 @@ export function StockManagement({
         </CardContent>
       </Card>
 
-      {/* Stock Card Grid */}
+      {/* Adjustment History */}
       <Card>
         <CardHeader>
-          <CardTitle>{s.stockInventory}</CardTitle>
-          <CardDescription>{stockItems.length} {s.itemsShown} — click a card to top up or edit</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {stockItems.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Package2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">{s.noStockFound}</p>
-              <p className="text-sm mt-1">{s.noStockDesc}</p>
-              <Button className="mt-4" onClick={() => setAddOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />{s.addStockItem}
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {stockItems.map(item => {
-                const status = getStockStatus(item);
-                const cfg = statusConfig[status] ?? statusConfig.good;
-                const avgCost = costMap.get(item.id) ?? 0;
-                const stockValue = item.quantity * avgCost;
-                return (
-                  <Card
-                    key={item.id}
-                    className={`relative group transition-all hover:shadow-md ${
-                      status === "expired"       ? "border-red-300 bg-red-50/40" :
-                      status === "expiring_soon" ? "border-orange-300 bg-orange-50/30" :
-                      status === "out"           ? "border-red-200 opacity-70" :
-                      status === "low"           ? "border-amber-200" : ""
-                    }`}
-                  >
-                    <CardContent className="p-4">
-                      {/* Action buttons — visible on hover */}
-                      <div className="absolute top-1 right-1 z-10 flex gap-0.5">
-                        <Button
-                          variant="ghost" size="sm"
-                          title="Edit / Set Quantity"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-blue-600 hover:bg-blue-50"
-                          onClick={e => { e.stopPropagation(); openManage(item); setManageTab("set"); }}
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost" size="sm"
-                          title="Delete"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                          onClick={e => { e.stopPropagation(); setItemToDelete(item); setDeleteConfirmOpen(true); }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-
-                      {/* Clickable body — opens top-up */}
-                      <div className="cursor-pointer" onClick={() => { openManage(item); setManageTab("topup"); }}>
-                        <div className={`aspect-square rounded-lg mb-2 flex items-center justify-center ${cfg.bg} border ${cfg.border}`}>
-                          <Package2 className={`h-6 w-6 ${cfg.color}`} />
-                        </div>
-                        <h4 className="font-medium text-sm truncate">{item.productName}</h4>
-                        <p className="text-xs text-muted-foreground truncate">{item.category}</p>
-                        <p className={`text-lg font-bold mt-1 ${
-                          item.quantity === 0 ? "text-red-600" :
-                          item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" : "text-foreground"
-                        }`}>
-                          {item.quantity}
-                          <span className="text-xs font-normal text-muted-foreground ml-1">{item.unit}</span>
-                        </p>
-                        {stockValue > 0 && (
-                          <p className="text-xs text-primary font-semibold mt-0.5">RM {stockValue.toFixed(2)}</p>
-                        )}
-                        <div className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium mt-1.5 ${cfg.color} ${cfg.bg} ${cfg.border}`}>
-                          {cfg.icon}{cfg.label}
-                        </div>
-                        {item.expiryDate && (
-                          <p className={`text-xs mt-1 ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : "text-muted-foreground"}`}>
-                            Exp: {new Date(item.expiryDate).toLocaleDateString()}
-                          </p>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-
-              {/* Add new card */}
-              <Card className="cursor-pointer hover:border-primary transition-colors border-dashed" onClick={() => setAddOpen(true)}>
-                <CardContent className="p-4">
-                  <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center">
-                    <Plus className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <h4 className="font-medium text-sm text-center">{s.addStockItem}</h4>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Top-Up History */}
-      <Card>
-        <CardHeader>
-          <button
-            className="flex items-center justify-between w-full text-left"
-            onClick={() => setShowHistory(v => !v)}
-          >
+          <button className="flex items-center justify-between w-full text-left" onClick={() => setShowHistory(v => !v)}>
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <History className="h-4 w-4 text-muted-foreground" />{s.adjustmentHistory}
@@ -488,7 +509,7 @@ export function StockManagement({
                               </span>
                             )}
                           </TableCell>
-                          <TableCell className="text-sm capitalize">{reasonLabel(adj.reason)}</TableCell>
+                          <TableCell className="text-sm capitalize">{getReasonLabel(adj.reason)}</TableCell>
                           <TableCell className="text-center">
                             <span className={`font-mono font-semibold ${adj.adjustmentType === "add" ? "text-green-600" : "text-red-600"}`}>
                               {adj.adjustmentType === "add" ? "+" : "-"}{adj.quantity}
@@ -520,20 +541,181 @@ export function StockManagement({
         )}
       </Card>
 
-      {/* ── Manage Dialog (Top-Up + Set Quantity tabs) ── */}
-      <Dialog open={manageOpen} onOpenChange={v => { if (!v) resetManage(); setManageOpen(v); }}>
-        <DialogContent className="sm:max-w-[440px]">
+      {/* Add Stock Dialog */}
+      <Dialog open={addOpen} onOpenChange={(v) => { setAddOpen(v); if (!v) { setAddFormError(""); setAddForm({ productName: "", category: "", quantity: "", unit: "unit", sellingPrice: "", costPerUnit: "", expiryDate: "", notes: "" }); } }}>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package2 className="h-5 w-5 text-primary" />
-              {manageItem?.productName}
+            <DialogTitle className="flex items-center gap-2"><Plus className="h-5 w-5 text-primary" />{s.addTitle}</DialogTitle>
+            <DialogDescription>{s.addDesc}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1">
+                <label className="text-sm font-medium">{s.productName}</label>
+                <Input placeholder={s.productNamePH} value={addForm.productName}
+                  onChange={e => { setAddForm(f => ({ ...f, productName: e.target.value })); setAddFormError(""); }}
+                  className={addFormError ? "border-red-400 focus:ring-red-200" : ""} />
+                {addFormError && <p className="text-xs text-red-500">{addFormError}</p>}
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{s.category}</label>
+                <Input placeholder={s.categoryPH} value={addForm.category} onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{s.unitType}</label>
+                <Select value={addForm.unit} onValueChange={v => setAddForm(f => ({ ...f, unit: v as UnitType }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{s.initialQty}</label>
+                <Input type="number" min="0" step="0.01" placeholder="0" value={addForm.quantity} onChange={e => setAddForm(f => ({ ...f, quantity: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{s.expiryDate} <span className="text-muted-foreground font-normal">({s.optional})</span></label>
+                <Input type="date" value={addForm.expiryDate} onChange={e => setAddForm(f => ({ ...f, expiryDate: e.target.value }))} />
+              </div>
+            </div>
+            <div className="border-t pt-3">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-3">{s.pricing}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">{s.sellingPrice}</label>
+                  <Input type="number" min="0" step="0.01" placeholder="0.00" value={addForm.sellingPrice} onChange={e => setAddForm(f => ({ ...f, sellingPrice: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">{s.costPerUnit}</label>
+                  <Input type="number" min="0" step="0.01" placeholder="0.00" value={addForm.costPerUnit} onChange={e => setAddForm(f => ({ ...f, costPerUnit: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{s.notes} <span className="text-muted-foreground font-normal">({s.optional})</span></label>
+              <Input placeholder={s.notesPH} value={addForm.notes} onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>{t.common.cancel}</Button>
+            <Button onClick={handleAddSubmit} disabled={!addForm.productName.trim() || !addForm.quantity || parseFloat(addForm.quantity) <= 0}>
+              <Plus className="h-4 w-4 mr-2" />{s.addToStock}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Top-Up Dialog */}
+      <Dialog open={topUpOpen} onOpenChange={setTopUpOpen}>
+        <DialogContent className="sm:max-w-[380px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-700">
+              <RefreshCw className="h-5 w-5" />{s.topUpTitle}
             </DialogTitle>
             <DialogDescription>
-              Current stock: <strong>{manageItem?.quantity} {manageItem?.unit}</strong>
+              {s.topUpDesc} <strong>{topUpItem?.productName}</strong>
+              <span className="block text-xs mt-0.5">{s.current} <strong>{topUpItem?.quantity} {topUpItem?.unit}</strong></span>
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{s.qtyToAdd}</label>
+              <Input type="number" min="0.01" step="0.01" placeholder="0" value={topUpQty} onChange={e => setTopUpQty(e.target.value)} autoFocus />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Cost Per Unit (RM) <span className="text-muted-foreground font-normal">({s.optional})</span></label>
+              <Input type="number" min="0" step="0.01" placeholder="0.00" value={topUpCost} onChange={e => setTopUpCost(e.target.value)} />
+              <p className="text-xs text-muted-foreground">If entered, this top-up will be recorded as an expense in Analytics.</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{s.notes} <span className="text-muted-foreground font-normal">({s.optional})</span></label>
+              <Input placeholder={s.topUpNotesPH} value={topUpNotes} onChange={e => setTopUpNotes(e.target.value)} />
+            </div>
+            {topUpQty && parseFloat(topUpQty) > 0 && topUpItem && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm space-y-0.5">
+                <p className="text-green-700">{s.afterTopUp} <strong>{(topUpItem.quantity + parseFloat(topUpQty)).toFixed(2)} {topUpItem.unit}</strong></p>
+                {topUpCost && parseFloat(topUpCost) > 0 && (
+                  <p className="text-green-700">Expense: <strong>RM {(parseFloat(topUpQty) * parseFloat(topUpCost)).toFixed(2)}</strong></p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTopUpOpen(false)}>{t.common.cancel}</Button>
+            <Button className="bg-green-600 hover:bg-green-700" onClick={handleTopUpSubmit} disabled={!topUpQty || parseFloat(topUpQty) <= 0}>
+              <Plus className="h-4 w-4 mr-2" />{s.topUp}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          {/* Tabs */}
-          <div className="flex gap-2 border-b pb-2">
-            <button
-              onClick={() => setManage
+      {/* Reduce Stock Dialog */}
+      <Dialog open={reduceOpen} onOpenChange={setReduceOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Minus className="h-5 w-5" />{s.reduceTitle}
+            </DialogTitle>
+            <DialogDescription>
+              {s.reduceDesc} <strong>{reduceItem?.productName}</strong>
+              <span className="block text-xs mt-0.5">{s.available} <strong>{reduceItem?.quantity} {reduceItem?.unit}</strong></span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{s.reason}</label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                {REDUCE_REASONS.map(r => (
+                  <button key={r.value}
+                    onClick={() => setReduceForm(f => ({ ...f, reason: r.value }))}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all text-left ${
+                      reduceForm.reason === r.value
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {r.value === "sold"       && <ArrowDownCircle className="h-4 w-4 text-blue-500 flex-shrink-0" />}
+                    {r.value === "expired"    && <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />}
+                    {r.value === "broken"     && <AlertTriangle className="h-4 w-4 text-orange-500 flex-shrink-0" />}
+                    {r.value === "returned"   && <RefreshCw className="h-4 w-4 text-purple-500 flex-shrink-0" />}
+                    {r.value === "adjustment" && <Package2 className="h-4 w-4 text-gray-500 flex-shrink-0" />}
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{s.qtyToReduce}</label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min="0.01" step="0.01" placeholder="0" max={reduceItem?.quantity}
+                  value={reduceForm.quantity} onChange={e => setReduceForm(f => ({ ...f, quantity: e.target.value }))} />
+                <Button variant="outline" size="sm" className="whitespace-nowrap"
+                  onClick={() => setReduceForm(f => ({ ...f, quantity: reduceItem?.quantity.toString() ?? "" }))}>
+                  {s.all} ({reduceItem?.quantity})
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{s.notes} <span className="text-muted-foreground font-normal">({s.optional})</span></label>
+              <Input placeholder={s.notesPH} value={reduceForm.notes} onChange={e => setReduceForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+            {reduceForm.quantity && parseFloat(reduceForm.quantity) > 0 && reduceItem && (
+              <div className={`p-3 rounded-lg border text-sm ${parseFloat(reduceForm.quantity) >= reduceItem.quantity ? "bg-red-50 border-red-200" : "bg-orange-50 border-orange-200"}`}>
+                <p>{s.afterReduction} <strong>{Math.max(0, reduceItem.quantity - parseFloat(reduceForm.quantity)).toFixed(2)} {reduceItem.unit}</strong></p>
+                {parseFloat(reduceForm.quantity) >= reduceItem.quantity && (
+                  <p className="text-red-600 text-xs mt-1">{s.willEmpty}</p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReduceOpen(false)}>{t.common.cancel}</Button>
+            <Button className="bg-red-600 hover:bg-red-700" onClick={handleReduceSubmit}
+              disabled={!reduceForm.quantity || parseFloat(reduceForm.quantity) <= 0}>
+              <Minus className="h-4 w-4 mr-2" />{s.reduceTitle}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
