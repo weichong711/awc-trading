@@ -3,6 +3,7 @@ import {
   Package2, Plus, Minus, Trash2, AlertTriangle, CheckCircle2,
   Clock, XCircle, ChevronDown, ChevronUp, Search, History,
   RefreshCw, ArrowDownCircle, ArrowUpCircle, Link2, TrendingDown,
+  BarChart3, Square, CheckSquare,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -13,11 +14,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "./ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogTrigger,
-} from "./ui/alert-dialog";
 import { StockItem, StockAdjustment, UnitType, Expense } from "../types/business";
 import { useLanguage } from "../contexts/LanguageContext";
 
@@ -81,6 +77,8 @@ interface AddStockForm {
 }
 interface ReduceForm { quantity: string; reason: string; notes: string; }
 
+type ActiveTab = "inventory" | "history" | "report";
+
 export function StockManagement({
   stockItems, stockAdjustments, expenses, onAddStock, onReduceStock, onDeleteStock,
 }: StockManagementProps) {
@@ -100,11 +98,18 @@ export function StockManagement({
     expiringSoon: s.statusExpiringSoon, expired: s.statusExpired,
   };
 
+  // -- Tab state --------------------------------------------------------------
+  const [activeTab, setActiveTab] = useState<ActiveTab>("inventory");
+
+  // -- Inventory state --------------------------------------------------------
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [showHistory, setShowHistory] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
+  // -- History state ----------------------------------------------------------
   const [historyShowAll, setHistoryShowAll] = useState(false);
 
+  // -- Add stock dialog -------------------------------------------------------
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState<AddStockForm>({
     productName: "", category: "", quantity: "", unit: "unit",
@@ -112,34 +117,38 @@ export function StockManagement({
   });
   const [addFormError, setAddFormError] = useState("");
 
+  // -- Top-up dialog ----------------------------------------------------------
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [topUpItem, setTopUpItem] = useState<StockItem | null>(null);
   const [topUpQty, setTopUpQty] = useState("");
   const [topUpNotes, setTopUpNotes] = useState("");
   const [topUpCost, setTopUpCost] = useState("");
 
+  // -- Reduce dialog ----------------------------------------------------------
   const [reduceOpen, setReduceOpen] = useState(false);
   const [reduceItem, setReduceItem] = useState<StockItem | null>(null);
   const [reduceForm, setReduceForm] = useState<ReduceForm>({ quantity: "", reason: "sold", notes: "" });
 
+  // -- Delete confirm dialog --------------------------------------------------
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<StockItem | null>(null);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+
+  // -- Derived data -----------------------------------------------------------
   const costMap = useMemo(() => {
     const map = new Map<string, { avgCost: number; totalSpent: number; lastCost: number }>();
     stockItems.forEach(item => {
       const matching = expenses.filter(
         e =>
           e.productName.toLowerCase() === item.productName.toLowerCase() &&
-          e.notes !== "Initial stock entry from new product" && // exclude auto-created init expense to avoid double-counting
-          !e.notes?.startsWith("Initial stock entry") // exclude manual stock add expenses too
+          e.notes !== "Initial stock entry from new product" &&
+          !e.notes?.startsWith("Initial stock entry")
       );
       const totalQty = matching.reduce((sum, e) => sum + e.quantity, 0);
       const totalSpent = matching.reduce((sum, e) => sum + e.totalCost, 0);
       const lastCost = [...matching].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.costPerUnit ?? 0;
-      // Prefer manually entered costPerUnit on the stock item itself;
-      // fall back to expense-derived average only if no manual cost is set
       const avgCostFromExpenses = totalQty > 0 ? totalSpent / totalQty : 0;
-      const avgCost = (item.costPerUnit ?? 0) > 0
-        ? item.costPerUnit!
-        : avgCostFromExpenses;
+      const avgCost = (item.costPerUnit ?? 0) > 0 ? item.costPerUnit! : avgCostFromExpenses;
       map.set(item.id, { avgCost, totalSpent, lastCost });
     });
     return map;
@@ -177,19 +186,26 @@ export function StockManagement({
     [stockItems, search, filterStatus]
   );
 
-  const sortedHistory = useMemo(() =>
-    [...stockAdjustments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [stockAdjustments]
+  // Top-up history only (reason === "received"), filtered to only active stock items
+  const activeStockIds = useMemo(() => new Set(stockItems.map(i => i.id)), [stockItems]);
+  const topUpHistory = useMemo(() =>
+    [...stockAdjustments]
+      .filter(adj => adj.reason === "received" && activeStockIds.has(adj.stockItemId))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [stockAdjustments, activeStockIds]
   );
   const HISTORY_LIMIT = 20;
 
+  const alertItems = stockItems.filter(i => ["expired", "expiring_soon", "out"].includes(getStockStatus(i)));
+
+  // -- Handlers ---------------------------------------------------------------
   const handleAddSubmit = () => {
     if (!addForm.productName.trim() || !addForm.quantity || parseFloat(addForm.quantity) <= 0) return;
     const isDuplicate = stockItems.some(
       s => s.productName.trim().toLowerCase() === addForm.productName.trim().toLowerCase()
     );
     if (isDuplicate) {
-      setAddFormError(`"${addForm.productName.trim()}" already exists in stock. Use the + button to top up instead.`);
+      setAddFormError(`"${addForm.productName.trim()}" already exists. Use the + button to top up instead.`);
       return;
     }
     onAddStock({
@@ -223,11 +239,38 @@ export function StockManagement({
 
   const openReduce = (item: StockItem) => { setReduceItem(item); setReduceForm({ quantity: "", reason: "sold", notes: "" }); setReduceOpen(true); };
   const openTopUp  = (item: StockItem) => { setTopUpItem(item); setTopUpQty(""); setTopUpNotes(""); setTopUpCost(""); setTopUpOpen(true); };
+  const confirmDelete = (item: StockItem) => { setItemToDelete(item); setDeleteConfirmOpen(true); };
 
-  const alertItems = stockItems.filter(i => ["expired", "expiring_soon", "out"].includes(getStockStatus(i)));
-  const getReasonLabel = (reason: string) =>
-    reason === "received" ? s.reasonReceived : (REDUCE_REASONS.find(r => r.value === reason)?.label || reason);
+  // Selection handlers
+  const toggleSelection = (itemId: string) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+  };
 
+  const selectAll = () => {
+    setSelectedItems(new Set(filtered.map(item => item.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedItems(new Set());
+  };
+
+  const handleBulkDelete = () => {
+    selectedItems.forEach(itemId => {
+      onDeleteStock(itemId);
+    });
+    setSelectedItems(new Set());
+    setBulkDeleteConfirmOpen(false);
+  };
+
+  // -- Render -----------------------------------------------------------------
   return (
     <div className="space-y-6">
 
@@ -265,7 +308,7 @@ export function StockManagement({
         ].map(card => (
           <Card key={card.label}
             className={`transition-all ${card.filter ? "cursor-pointer hover:shadow-md" : ""} ${filterStatus === card.filter ? "ring-2 ring-primary" : ""} ${card.bg}`}
-            onClick={() => card.filter && setFilterStatus(filterStatus === card.filter ? "all" : card.filter)}
+            onClick={() => { if (card.filter) { setFilterStatus(filterStatus === card.filter ? "all" : card.filter); setActiveTab("inventory"); } }}
           >
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-1">
@@ -314,32 +357,87 @@ export function StockManagement({
         </div>
       )}
 
-      {/* Search + filter */}
-      <div className="flex flex-wrap gap-2">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder={s.searchPlaceholder} value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{s.allStatus}</SelectItem>
-            <SelectItem value="good">{s.statusGood}</SelectItem>
-            <SelectItem value="low">{s.statusLow}</SelectItem>
-            <SelectItem value="expiring_soon">{s.statusExpiringSoon}</SelectItem>
-            <SelectItem value="expired">{s.statusExpired}</SelectItem>
-            <SelectItem value="out">{s.statusOut}</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* Tab navigation */}
+      <div className="flex gap-1 border-b">
+        {([
+          { key: "inventory", label: "Inventory", icon: <Package2 className="h-4 w-4" /> },
+          { key: "history",   label: "Top-Up History", icon: <History className="h-4 w-4" /> },
+          { key: "report",    label: "Summary Report", icon: <BarChart3 className="h-4 w-4" /> },
+        ] as { key: ActiveTab; label: string; icon: React.ReactNode }[]).map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              activeTab === tab.key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground"
+            }`}
+          >
+            {tab.icon}{tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Stock Table */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">{s.stockInventory}</CardTitle>
-          <CardDescription>{filtered.length} {s.itemsShown}</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
+      {/* -- INVENTORY TAB --------------------------------------------------- */}
+      {activeTab === "inventory" && (
+        <div className="space-y-4">
+          {/* Search + filter + bulk actions */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input className="pl-9" placeholder={s.searchPlaceholder} value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{s.allStatus}</SelectItem>
+                <SelectItem value="good">{s.statusGood}</SelectItem>
+                <SelectItem value="low">{s.statusLow}</SelectItem>
+                <SelectItem value="expiring_soon">{s.statusExpiringSoon}</SelectItem>
+                <SelectItem value="expired">{s.statusExpired}</SelectItem>
+                <SelectItem value="out">{s.statusOut}</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* Bulk action buttons */}
+            {selectedItems.size > 0 && (
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-sm text-muted-foreground">
+                  {selectedItems.size} selected
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={deselectAll}
+                >
+                  Clear
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteConfirmOpen(true)}
+                  className="flex items-center gap-1"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            )}
+            
+            {/* Select all button when no items selected */}
+            {selectedItems.size === 0 && filtered.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={selectAll}
+                className="ml-auto"
+              >
+                Select All
+              </Button>
+            )}
+          </div>
+
+          {/* Stock Card Grid */}
           {filtered.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <Package2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
@@ -350,128 +448,174 @@ export function StockManagement({
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{s.colProduct}</TableHead>
-                    <TableHead>{s.colCategory}</TableHead>
-                    <TableHead className="text-center">{s.colQty}</TableHead>
-                    <TableHead className="text-right">{s.colAvgCost}</TableHead>
-                    <TableHead className="text-right">{s.colStockValue}</TableHead>
-                    <TableHead>{s.colExpiry}</TableHead>
-                    <TableHead>{s.colStatus}</TableHead>
-                    <TableHead className="text-right">{s.colActions}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map(item => {
-                    const status = getStockStatus(item);
-                    const avgCost = costMap.get(item.id)?.avgCost ?? 0;
-                    const stockValue = item.quantity * avgCost;
-                    const isExpenseLinked = item.category === "Expense-linked" ||
-                      expenses.some(e => e.productName.toLowerCase() === item.productName.toLowerCase());
-                    const expDays = item.expiryDate ? daysUntilExpiry(item.expiryDate) : 0;
-                    return (
-                      <TableRow key={item.id} className={status === "expired" ? "bg-red-50/50" : status === "expiring_soon" ? "bg-orange-50/30" : ""}>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <p className="font-medium">{item.productName}</p>
-                            {isExpenseLinked && (
-                              <span className="inline-flex items-center gap-0.5 text-xs text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full">
-                                <Link2 className="h-2.5 w-2.5" />{s.expenseLinked}
-                              </span>
-                            )}
-                          </div>
-                          {item.notes && item.notes !== "Auto-created from expense" && (
-                            <p className="text-xs text-muted-foreground truncate max-w-[180px]">{item.notes}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {filtered.map(item => {
+                const status = getStockStatus(item);
+                const avgCost = costMap.get(item.id)?.avgCost ?? 0;
+                const stockValue = item.quantity * avgCost;
+                const isExpenseLinked = expenses.some(e => e.productName.toLowerCase() === item.productName.toLowerCase());
+                const expDays = item.expiryDate ? daysUntilExpiry(item.expiryDate) : 0;
+
+                const statusBorderColor =
+                  status === "expired" ? "border-red-300 bg-red-50/40" :
+                  status === "expiring_soon" ? "border-orange-300 bg-orange-50/30" :
+                  status === "out" ? "border-red-200 bg-red-50/20" :
+                  status === "low" ? "border-amber-200 bg-amber-50/20" :
+                  "hover:border-primary";
+
+                return (
+                  <Card
+                    key={item.id}
+                    className={`relative group transition-all ${statusBorderColor} ${
+                      selectedItems.has(item.id) ? "ring-2 ring-primary" : ""
+                    }`}
+                  >
+                    <CardContent className="p-4">
+                      {/* Checkbox for selection - top left */}
+                      <div className="absolute top-2 left-2 z-10">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelection(item.id);
+                          }}
+                          className="h-6 w-6 rounded border-2 border-muted-foreground/30 bg-background hover:border-primary transition-colors flex items-center justify-center"
+                        >
+                          {selectedItems.has(item.id) ? (
+                            <CheckSquare className="h-5 w-5 text-primary" />
+                          ) : (
+                            <Square className="h-5 w-5 text-muted-foreground/50" />
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">{item.category}</Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className={`font-bold text-base ${item.quantity === 0 ? "text-red-600" : item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" : "text-foreground"}`}>
+                        </button>
+                      </div>
+
+                      {/* Action buttons � top right, visible on hover */}
+                      <div className="absolute top-1 right-1 flex gap-0.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title={s.reduceTitle}
+                          className="h-7 w-7 p-0 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
+                          onClick={e => { e.stopPropagation(); openReduce(item); }}
+                          disabled={item.quantity === 0}
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title={s.deleteTitle}
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                          onClick={e => { e.stopPropagation(); confirmDelete(item); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      {/* Card body - click to top up */}
+                      <div
+                        className="cursor-pointer"
+                        onClick={() => openTopUp(item)}
+                      >
+                        {/* Card icon area */}
+                        <div className={`aspect-square rounded-lg mb-2 flex flex-col items-center justify-center relative overflow-hidden
+                          ${status === "expired" ? "bg-red-100" :
+                            status === "expiring_soon" ? "bg-orange-100" :
+                            status === "out" ? "bg-red-50" :
+                            status === "low" ? "bg-amber-50" :
+                            "bg-muted"}`}>
+                          <Package2 className={`h-7 w-7 mb-1
+                            ${status === "expired" || status === "out" ? "text-red-400" :
+                              status === "expiring_soon" ? "text-orange-400" :
+                              status === "low" ? "text-amber-500" :
+                              "text-muted-foreground"}`} />
+                          <span className={`text-lg font-bold leading-none
+                            ${item.quantity === 0 ? "text-red-600" :
+                              item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" :
+                              "text-foreground"}`}>
                             {item.quantity}
                           </span>
-                          <span className="text-xs text-muted-foreground ml-1">{item.unit}</span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {avgCost > 0 ? <span className="text-sm font-medium">RM {avgCost.toFixed(2)}</span> : <span className="text-xs text-muted-foreground">—</span>}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {stockValue > 0 ? <span className="text-sm font-semibold text-primary">RM {stockValue.toFixed(2)}</span> : <span className="text-xs text-muted-foreground">—</span>}
-                        </TableCell>
-                        <TableCell>
-                          {item.expiryDate ? (
-                            <div>
-                              <p className={`text-sm font-medium ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : "text-foreground"}`}>
-                                {new Date(item.expiryDate).toLocaleDateString()}
-                              </p>
-                              {status === "expiring_soon" && <p className="text-xs text-orange-500">{expDays}{s.dLeft}</p>}
-                              {status === "expired" && <p className="text-xs text-red-500">{Math.abs(expDays)}{s.dAgo}</p>}
+                          <span className="text-xs text-muted-foreground">{item.unit}</span>
+                          {/* Top-up hint overlay */}
+                          <div className="absolute inset-0 bg-green-600/80 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="text-white text-center">
+                              <Plus className="h-6 w-6 mx-auto mb-0.5" />
+                              <span className="text-xs font-semibold">{s.topUp}</span>
                             </div>
-                          ) : <span className="text-xs text-muted-foreground">—</span>}
-                        </TableCell>
-                        <TableCell><StatusBadge status={status} labels={statusLabels} /></TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="sm" title={s.topUp} className="text-green-600 hover:text-green-700 hover:bg-green-50 h-8 w-8 p-0" onClick={() => openTopUp(item)}>
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" title={s.reduceTitle} className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0" onClick={() => openReduce(item)} disabled={item.quantity === 0}>
-                              <Minus className="h-4 w-4" />
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>{s.deleteTitle}</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    {item.productName} — {s.deleteDesc}
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-                                  <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => onDeleteStock(item.id)}>{t.common.delete}</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                        </div>
+
+                        {/* Product name */}
+                        <h4 className="font-medium text-sm truncate" title={item.productName}>{item.productName}</h4>
+
+                        {/* Category badge */}
+                        <p className="text-xs text-muted-foreground truncate">{item.category}</p>
+
+                        {/* Status badge */}
+                        <div className="mt-1.5">
+                          <StatusBadge status={status} labels={statusLabels} />
+                        </div>
+
+                        {/* Cost / value */}
+                        {avgCost > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            RM {avgCost.toFixed(2)}/{item.unit}
+                            {stockValue > 0 && <span className="text-primary font-semibold ml-1">= RM {stockValue.toFixed(2)}</span>}
+                          </p>
+                        )}
+
+                        {/* Expiry */}
+                        {item.expiryDate && (
+                          <p className={`text-xs mt-0.5 ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : "text-muted-foreground"}`}>
+                            {status === "expiring_soon" ? `${expDays}d left` :
+                             status === "expired" ? `${Math.abs(expDays)}d ago` :
+                             new Date(item.expiryDate).toLocaleDateString()}
+                          </p>
+                        )}
+
+                        {/* Expense linked badge */}
+                        {isExpenseLinked && (
+                          <span className="inline-flex items-center gap-0.5 text-xs text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full mt-1">
+                            <Link2 className="h-2.5 w-2.5" />{s.expenseLinked}
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+
+              {/* Add new stock card */}
+              <Card
+                className="cursor-pointer hover:border-primary transition-colors border-dashed"
+                onClick={() => setAddOpen(true)}
+              >
+                <CardContent className="p-4">
+                  <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center">
+                    <Plus className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h4 className="font-medium text-sm text-center">{s.addStockItem}</h4>
+                </CardContent>
+              </Card>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Adjustment History */}
-      <Card>
-        <CardHeader>
-          <button className="flex items-center justify-between w-full text-left" onClick={() => setShowHistory(v => !v)}>
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <History className="h-4 w-4 text-muted-foreground" />{s.adjustmentHistory}
-              </CardTitle>
-              <CardDescription>{sortedHistory.length} {s.records}</CardDescription>
-            </div>
-            {showHistory ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-          </button>
-        </CardHeader>
-        {showHistory && (
+        </div>
+      )}
+      {/* -- HISTORY TAB ---------------------------------------------------- */}
+      {activeTab === "history" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <History className="h-4 w-4 text-muted-foreground" />Top-Up History
+            </CardTitle>
+            <CardDescription>
+              {topUpHistory.length} top-up records (deleted stock entries are removed)
+            </CardDescription>
+          </CardHeader>
           <CardContent className="p-0">
-            {sortedHistory.length === 0 ? (
+            {topUpHistory.length === 0 ? (
               <div className="text-center py-10 text-muted-foreground">
                 <History className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">{s.noAdjustments}</p>
+                <p className="text-sm">No top-up history yet</p>
               </div>
             ) : (
               <>
@@ -481,15 +625,13 @@ export function StockManagement({
                       <TableRow>
                         <TableHead>{s.colDateTime}</TableHead>
                         <TableHead>{s.colProduct}</TableHead>
-                        <TableHead>{s.colType}</TableHead>
-                        <TableHead>{s.colReason}</TableHead>
                         <TableHead className="text-center">{s.colQtyChanged}</TableHead>
                         <TableHead className="text-center">{s.colBeforeAfter}</TableHead>
                         <TableHead>{s.colNotes}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(historyShowAll ? sortedHistory : sortedHistory.slice(0, HISTORY_LIMIT)).map(adj => (
+                      {(historyShowAll ? topUpHistory : topUpHistory.slice(0, HISTORY_LIMIT)).map(adj => (
                         <TableRow key={adj.id}>
                           <TableCell className="text-sm whitespace-nowrap">
                             {new Date(adj.date).toLocaleDateString()}{" "}
@@ -498,48 +640,144 @@ export function StockManagement({
                             </span>
                           </TableCell>
                           <TableCell className="font-medium">{adj.productName}</TableCell>
-                          <TableCell>
-                            {adj.adjustmentType === "add" ? (
-                              <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full border border-green-200">
-                                <ArrowUpCircle className="h-3 w-3" />{s.typeAdded}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
-                                <ArrowDownCircle className="h-3 w-3" />{s.typeReduced}
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-sm capitalize">{getReasonLabel(adj.reason)}</TableCell>
                           <TableCell className="text-center">
-                            <span className={`font-mono font-semibold ${adj.adjustmentType === "add" ? "text-green-600" : "text-red-600"}`}>
-                              {adj.adjustmentType === "add" ? "+" : "-"}{adj.quantity}
-                            </span>
+                            <span className="font-mono font-semibold text-green-600">+{adj.quantity}</span>
                           </TableCell>
                           <TableCell className="text-center text-sm font-mono text-muted-foreground">
-                            {adj.previousQty} → <strong className="text-foreground">{adj.newQty}</strong>
+                            {adj.previousQty} <ArrowUpCircle className="h-3 w-3 inline text-green-500 mx-1" /> <strong className="text-foreground">{adj.newQty}</strong>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">
-                            {adj.notes || "—"}
+                            {adj.notes || "�"}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
-                {sortedHistory.length > HISTORY_LIMIT && (
+                {topUpHistory.length > HISTORY_LIMIT && (
                   <div className="flex justify-center py-3 border-t">
                     <Button variant="ghost" size="sm" onClick={() => setHistoryShowAll(v => !v)}>
                       {historyShowAll
                         ? <><ChevronUp className="h-4 w-4 mr-1" />{t.analytics.showLess}</>
-                        : <><ChevronDown className="h-4 w-4 mr-1" />{t.analytics.showAll} ({sortedHistory.length})</>}
+                        : <><ChevronDown className="h-4 w-4 mr-1" />{t.analytics.showAll} ({topUpHistory.length})</>}
                     </Button>
                   </div>
                 )}
               </>
             )}
           </CardContent>
-        )}
-      </Card>
+        </Card>
+      )}
+
+      {/* -- REPORT TAB ------------------------------------------------------ */}
+      {activeTab === "report" && (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <BarChart3 className="h-4 w-4 text-primary" />Summary Report
+              </CardTitle>
+              <CardDescription>
+                Active stock only � deleted items are excluded
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Summary totals */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div className="p-3 bg-muted/40 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Total Items</p>
+                  <p className="text-2xl font-bold">{stockItems.length}</p>
+                </div>
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Total Stock Value</p>
+                  <p className="text-2xl font-bold text-green-700">RM {totalStockValue.toFixed(2)}</p>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Low / Out of Stock</p>
+                  <p className="text-2xl font-bold text-amber-700">{stats.low + stats.out}</p>
+                </div>
+                <div className="p-3 bg-orange-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Expiring / Expired</p>
+                  <p className="text-2xl font-bold text-orange-700">{stats.expiringSoon + stats.expired}</p>
+                </div>
+              </div>
+
+              {/* Per-item breakdown */}
+              {stockItems.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <Package2 className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No active stock to report</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{s.colProduct}</TableHead>
+                        <TableHead>{s.colCategory}</TableHead>
+                        <TableHead className="text-center">{s.colQty}</TableHead>
+                        <TableHead className="text-right">{s.colAvgCost}</TableHead>
+                        <TableHead className="text-right">{s.colStockValue}</TableHead>
+                        <TableHead>{s.colExpiry}</TableHead>
+                        <TableHead>{s.colStatus}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[...stockItems]
+                        .sort((a, b) => {
+                          const order: Record<string, number> = { expired: 0, expiring_soon: 1, out: 2, low: 3, good: 4 };
+                          return (order[getStockStatus(a)] ?? 5) - (order[getStockStatus(b)] ?? 5);
+                        })
+                        .map(item => {
+                          const status = getStockStatus(item);
+                          const avgCost = costMap.get(item.id)?.avgCost ?? 0;
+                          const stockValue = item.quantity * avgCost;
+                          const expDays = item.expiryDate ? daysUntilExpiry(item.expiryDate) : 0;
+                          return (
+                            <TableRow key={item.id} className={status === "expired" ? "bg-red-50/50" : status === "expiring_soon" ? "bg-orange-50/30" : ""}>
+                              <TableCell className="font-medium">{item.productName}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">{item.category}</Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className={`font-bold ${item.quantity === 0 ? "text-red-600" : item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" : "text-foreground"}`}>
+                                  {item.quantity}
+                                </span>
+                                <span className="text-xs text-muted-foreground ml-1">{item.unit}</span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {avgCost > 0 ? <span className="text-sm">RM {avgCost.toFixed(2)}</span> : <span className="text-xs text-muted-foreground">�</span>}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {stockValue > 0 ? <span className="text-sm font-semibold text-primary">RM {stockValue.toFixed(2)}</span> : <span className="text-xs text-muted-foreground">�</span>}
+                              </TableCell>
+                              <TableCell>
+                                {item.expiryDate ? (
+                                  <div>
+                                    <p className={`text-sm font-medium ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : "text-foreground"}`}>
+                                      {new Date(item.expiryDate).toLocaleDateString()}
+                                    </p>
+                                    {status === "expiring_soon" && <p className="text-xs text-orange-500">{expDays}{s.dLeft}</p>}
+                                    {status === "expired" && <p className="text-xs text-red-500">{Math.abs(expDays)}{s.dAgo}</p>}
+                                  </div>
+                                ) : <span className="text-xs text-muted-foreground">�</span>}
+                              </TableCell>
+                              <TableCell><StatusBadge status={status} labels={statusLabels} /></TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ================================================================== */}
+      {/* DIALOGS                                                              */}
+      {/* ================================================================== */}
 
       {/* Add Stock Dialog */}
       <Dialog open={addOpen} onOpenChange={(v) => { setAddOpen(v); if (!v) { setAddFormError(""); setAddForm({ productName: "", category: "", quantity: "", unit: "unit", sellingPrice: "", costPerUnit: "", expiryDate: "", notes: "" }); } }}>
@@ -716,6 +954,79 @@ export function StockManagement({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />{s.deleteTitle}
+            </DialogTitle>
+            <DialogDescription>
+              <strong>{itemToDelete?.productName}</strong> � {s.deleteDesc}
+              <span className="block mt-1 text-xs text-amber-600">Top-up history for this item will also be removed.</span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteConfirmOpen(false); setItemToDelete(null); }}>
+              {t.common.cancel}
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                if (itemToDelete) { onDeleteStock(itemToDelete.id); }
+                setDeleteConfirmOpen(false);
+                setItemToDelete(null);
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />{t.common.delete}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirm Dialog */}
+      <Dialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />Delete Multiple Products
+            </DialogTitle>
+            <DialogDescription>
+              You are about to delete <strong>{selectedItems.size} product{selectedItems.size !== 1 ? 's' : ''}</strong>.
+              <span className="block mt-2 text-xs text-amber-600">
+                ⚠️ This will also remove all top-up history for these items. This action cannot be undone.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[200px] overflow-y-auto border rounded-lg p-3 bg-muted/30">
+            <ul className="space-y-1 text-sm">
+              {Array.from(selectedItems).map(itemId => {
+                const item = stockItems.find(s => s.id === itemId);
+                return item ? (
+                  <li key={itemId} className="flex items-center gap-2">
+                    <Package2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="font-medium">{item.productName}</span>
+                    <span className="text-xs text-muted-foreground">({item.quantity} {item.unit})</span>
+                  </li>
+                ) : null;
+              })}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteConfirmOpen(false)}>
+              {t.common.cancel}
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleBulkDelete}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />Delete {selectedItems.size} Item{selectedItems.size !== 1 ? 's' : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
