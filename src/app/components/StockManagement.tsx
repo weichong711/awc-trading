@@ -3,7 +3,7 @@ import {
   Package2, Plus, Minus, Trash2, AlertTriangle, CheckCircle2,
   Clock, XCircle, ChevronDown, ChevronUp, Search, History,
   RefreshCw, ArrowDownCircle, ArrowUpCircle, Link2, TrendingDown,
-  BarChart3, Square, CheckSquare,
+  BarChart3, Square, CheckSquare, Edit,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -129,6 +129,12 @@ export function StockManagement({
   const [reduceItem, setReduceItem] = useState<StockItem | null>(null);
   const [reduceForm, setReduceForm] = useState<ReduceForm>({ quantity: "", reason: "sold", notes: "" });
 
+  // -- Edit quantity dialog ---------------------------------------------------
+  const [editQtyOpen, setEditQtyOpen] = useState(false);
+  const [editQtyItem, setEditQtyItem] = useState<StockItem | null>(null);
+  const [editQtyValue, setEditQtyValue] = useState("");
+  const [editQtyNotes, setEditQtyNotes] = useState("");
+
   // -- Delete confirm dialog --------------------------------------------------
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<StockItem | null>(null);
@@ -240,6 +246,39 @@ export function StockManagement({
   const openReduce = (item: StockItem) => { setReduceItem(item); setReduceForm({ quantity: "", reason: "sold", notes: "" }); setReduceOpen(true); };
   const openTopUp  = (item: StockItem) => { setTopUpItem(item); setTopUpQty(""); setTopUpNotes(""); setTopUpCost(""); setTopUpOpen(true); };
   const confirmDelete = (item: StockItem) => { setItemToDelete(item); setDeleteConfirmOpen(true); };
+  const openEditQty = (item: StockItem) => { 
+    setEditQtyItem(item); 
+    setEditQtyValue(item.quantity.toString()); 
+    setEditQtyNotes(""); 
+    setEditQtyOpen(true); 
+  };
+
+  const handleEditQtySubmit = () => {
+    if (!editQtyItem || !editQtyValue) return;
+    const newQty = parseFloat(editQtyValue);
+    if (newQty < 0) return; // Don't allow negative quantities
+    
+    const difference = newQty - editQtyItem.quantity;
+    
+    if (difference === 0) {
+      // No change
+      setEditQtyOpen(false);
+      return;
+    }
+    
+    if (difference > 0) {
+      // Increase - use top-up mechanism
+      onReduceStock(editQtyItem.id, -Math.abs(difference), "received", editQtyNotes || "Quantity adjusted (increased)");
+    } else {
+      // Decrease - use reduce mechanism
+      onReduceStock(editQtyItem.id, Math.abs(difference), "adjustment", editQtyNotes || "Quantity adjusted (decreased)");
+    }
+    
+    setEditQtyOpen(false);
+    setEditQtyItem(null);
+    setEditQtyValue("");
+    setEditQtyNotes("");
+  };
 
   // Selection handlers
   const toggleSelection = (itemId: string) => {
@@ -488,8 +527,17 @@ export function StockManagement({
                         </button>
                       </div>
 
-                      {/* Action buttons � top right, visible on hover */}
+                      {/* Action buttons – top right, visible on hover */}
                       <div className="absolute top-1 right-1 flex gap-0.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Edit Quantity"
+                          className="h-7 w-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                          onClick={e => { e.stopPropagation(); openEditQty(item); }}
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -950,6 +998,84 @@ export function StockManagement({
             <Button className="bg-red-600 hover:bg-red-700" onClick={handleReduceSubmit}
               disabled={!reduceForm.quantity || parseFloat(reduceForm.quantity) <= 0}>
               <Minus className="h-4 w-4 mr-2" />{s.reduceTitle}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Quantity Dialog */}
+      <Dialog open={editQtyOpen} onOpenChange={setEditQtyOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-600">
+              <Edit className="h-5 w-5" />Edit Stock Quantity
+            </DialogTitle>
+            <DialogDescription>
+              Directly set the quantity for <strong>{editQtyItem?.productName}</strong>
+              <span className="block text-xs mt-0.5">Current: <strong>{editQtyItem?.quantity} {editQtyItem?.unit}</strong></span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">New Quantity</label>
+              <Input 
+                type="number" 
+                min="0" 
+                step="0.01" 
+                placeholder="Enter new quantity" 
+                value={editQtyValue}
+                onChange={e => setEditQtyValue(e.target.value)}
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter the exact quantity you want. Can be higher or lower than current.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Notes <span className="text-muted-foreground font-normal">(optional)</span></label>
+              <Input 
+                placeholder="Reason for adjustment..." 
+                value={editQtyNotes} 
+                onChange={e => setEditQtyNotes(e.target.value)} 
+              />
+            </div>
+            {editQtyValue && editQtyItem && parseFloat(editQtyValue) !== editQtyItem.quantity && (
+              <div className={`p-3 rounded-lg border text-sm ${
+                parseFloat(editQtyValue) > editQtyItem.quantity 
+                  ? "bg-green-50 border-green-200" 
+                  : parseFloat(editQtyValue) === 0 
+                    ? "bg-red-50 border-red-200"
+                    : "bg-orange-50 border-orange-200"
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium">Change Preview:</span>
+                  {parseFloat(editQtyValue) > editQtyItem.quantity ? (
+                    <span className="text-green-600 font-semibold">
+                      +{(parseFloat(editQtyValue) - editQtyItem.quantity).toFixed(2)} {editQtyItem.unit}
+                    </span>
+                  ) : (
+                    <span className="text-orange-600 font-semibold">
+                      -{(editQtyItem.quantity - parseFloat(editQtyValue)).toFixed(2)} {editQtyItem.unit}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs">
+                  {editQtyItem.quantity} → <strong>{parseFloat(editQtyValue).toFixed(2)} {editQtyItem.unit}</strong>
+                </p>
+                {parseFloat(editQtyValue) === 0 && (
+                  <p className="text-red-600 text-xs mt-1">⚠️ This will set stock to zero</p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditQtyOpen(false)}>{t.common.cancel}</Button>
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700" 
+              onClick={handleEditQtySubmit}
+              disabled={!editQtyValue || parseFloat(editQtyValue) < 0 || (editQtyItem && parseFloat(editQtyValue) === editQtyItem.quantity)}
+            >
+              <Edit className="h-4 w-4 mr-2" />Update Quantity
             </Button>
           </DialogFooter>
         </DialogContent>
