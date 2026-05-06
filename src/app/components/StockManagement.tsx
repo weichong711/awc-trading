@@ -23,7 +23,7 @@ import {
 } from "./ui/dropdown-menu";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
-import { StockItem, StockAdjustment, UnitType, Expense } from "../types/business";
+import { StockItem, StockAdjustment, UnitType, Expense, DeleteRecord, DeleteReason } from "../types/business";
 import { useLanguage } from "../contexts/LanguageContext";
 
 const UNITS: UnitType[] = ["unit", "kg", "gram", "liter", "ml", "piece"];
@@ -31,30 +31,13 @@ const LOW_STOCK_THRESHOLD = 10;
 
 // Delete reasons with financial impact
 const DELETE_REASONS = [
-  { value: "return_to_supplier", label: "Return to Supplier", impact: "refund", icon: "↩️" },
-  { value: "expired", label: "Expired", impact: "loss", icon: "⏰" },
-  { value: "spoiled", label: "Spoiled", impact: "loss", icon: "🦠" },
-  { value: "lost", label: "Lost", impact: "loss", icon: "❓" },
-  { value: "damaged", label: "Damaged", impact: "loss", icon: "💔" },
-  { value: "other", label: "Other", impact: "loss", icon: "📝" },
-] as const;
-
-type DeleteReason = typeof DELETE_REASONS[number]["value"];
-
-interface DeleteRecord {
-  id: string;
-  stockItemId: string;
-  productName: string;
-  quantity: number;
-  unit: UnitType;
-  costPerUnit: number;
-  totalValue: number;
-  reason: DeleteReason;
-  financialImpact: "refund" | "loss";
-  impactAmount: number;
-  date: Date;
-  notes?: string;
-}
+  { value: "return_to_supplier" as const, label: "Return to Supplier", impact: "refund" as const, icon: "↩️" },
+  { value: "expired" as const, label: "Expired", impact: "loss" as const, icon: "⏰" },
+  { value: "spoiled" as const, label: "Spoiled", impact: "loss" as const, icon: "🦠" },
+  { value: "lost" as const, label: "Lost", impact: "loss" as const, icon: "❓" },
+  { value: "damaged" as const, label: "Damaged", impact: "loss" as const, icon: "💔" },
+  { value: "other" as const, label: "Other", impact: "loss" as const, icon: "📝" },
+];
 
 function getStockStatus(item: StockItem) {
   const today = new Date();
@@ -115,7 +98,7 @@ interface AddStockForm {
 }
 interface ReduceForm { quantity: string; reason: string; notes: string; }
 
-type ActiveTab = "inventory" | "history" | "report";
+type ActiveTab = "inventory" | "topup_history" | "delete_history" | "report";
 
 export function StockManagement({
   stockItems, stockAdjustments, expenses, deleteRecords, onAddStock, onReduceStock, onDeleteStock, onUpdateStock,
@@ -458,8 +441,9 @@ export function StockManagement({
       <div className="flex gap-1 border-b">
         {([
           { key: "inventory", label: "Inventory", icon: <Package2 className="h-4 w-4" /> },
-          { key: "history",   label: "Top-Up History", icon: <History className="h-4 w-4" /> },
-          { key: "report",    label: "Summary Report", icon: <BarChart3 className="h-4 w-4" /> },
+          { key: "topup_history", label: "Top-Up History", icon: <ArrowUpCircle className="h-4 w-4" /> },
+          { key: "delete_history", label: "Delete History", icon: <Trash2 className="h-4 w-4" /> },
+          { key: "report", label: "Summary Report", icon: <BarChart3 className="h-4 w-4" /> },
         ] as { key: ActiveTab; label: string; icon: React.ReactNode }[]).map(tab => (
           <button
             key={tab.key}
@@ -585,36 +569,64 @@ export function StockManagement({
                         </button>
                       </div>
 
-                      {/* Action buttons – top right, visible on hover */}
-                      <div className="absolute top-1 right-1 flex gap-0.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Edit Quantity"
-                          className="h-7 w-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={e => { e.stopPropagation(); openEditQty(item); }}
-                        >
-                          <Edit className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title={s.reduceTitle}
-                          className="h-7 w-7 p-0 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
-                          onClick={e => { e.stopPropagation(); openReduce(item); }}
-                          disabled={item.quantity === 0}
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title={s.deleteTitle}
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                          onClick={e => { e.stopPropagation(); confirmDelete(item); }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                      {/* Actions dropdown menu – top right */}
+                      <div className="absolute top-2 right-2 z-10">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 hover:bg-background"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTopUp(item);
+                              }}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <Plus className="h-4 w-4 text-green-600" />
+                              <span>Top Up Stock</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditQty(item);
+                              }}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <Edit className="h-4 w-4 text-blue-600" />
+                              <span>Edit Quantity</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openReduce(item);
+                              }}
+                              disabled={item.quantity === 0}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <Minus className="h-4 w-4 text-orange-600" />
+                              <span>Reduce Stock</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                confirmDelete(item);
+                              }}
+                              className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span>Delete Product</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
 
                       {/* Card body - click to top up */}
@@ -706,8 +718,8 @@ export function StockManagement({
           )}
         </div>
       )}
-      {/* -- HISTORY TAB ---------------------------------------------------- */}
-      {activeTab === "history" && (
+      {/* -- TOP-UP HISTORY TAB ---------------------------------------------------- */}
+      {activeTab === "topup_history" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -770,6 +782,99 @@ export function StockManagement({
                   </div>
                 )}
               </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* -- DELETE HISTORY TAB ------------------------------------------------- */}
+      {activeTab === "delete_history" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Trash2 className="h-4 w-4 text-red-600" />Delete History
+            </CardTitle>
+            <CardDescription>
+              {deleteRecords.length} delete records with financial impact tracking
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {deleteRecords.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <Trash2 className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No delete history yet</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date & Time</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-center">Quantity</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead className="text-right">Value</TableHead>
+                      <TableHead className="text-right">Financial Impact</TableHead>
+                      <TableHead>Notes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[...deleteRecords]
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .map(record => {
+                        const reasonInfo = DELETE_REASONS.find(r => r.value === record.reason);
+                        return (
+                          <TableRow key={record.id}>
+                            <TableCell className="text-sm whitespace-nowrap">
+                              {new Date(record.date).toLocaleDateString()}{" "}
+                              <span className="text-muted-foreground text-xs">
+                                {new Date(record.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </TableCell>
+                            <TableCell className="font-medium">{record.productName}</TableCell>
+                            <TableCell className="text-center">
+                              <span className="font-mono font-semibold text-red-600">-{record.quantity}</span>
+                              <span className="text-xs text-muted-foreground ml-1">{record.unit}</span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-lg">{reasonInfo?.icon}</span>
+                                <span className="text-sm">{reasonInfo?.label}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className="text-sm font-mono">RM {record.totalValue.toFixed(2)}</span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {record.financialImpact === "refund" ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-sm font-semibold text-green-600">
+                                    -RM {record.impactAmount.toFixed(2)}
+                                  </span>
+                                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                    Refund
+                                  </Badge>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-sm font-semibold text-red-600">
+                                    +RM {record.impactAmount.toFixed(2)}
+                                  </span>
+                                  <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+                                    Loss
+                                  </Badge>
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">
+                              {record.notes || "—"}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -1141,29 +1246,91 @@ export function StockManagement({
 
       {/* Delete Confirm Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
-              <Trash2 className="h-5 w-5" />{s.deleteTitle}
+              <Trash2 className="h-5 w-5" />Delete Product
             </DialogTitle>
             <DialogDescription>
-              <strong>{itemToDelete?.productName}</strong> � {s.deleteDesc}
-              <span className="block mt-1 text-xs text-amber-600">Top-up history for this item will also be removed.</span>
+              Delete <strong>{itemToDelete?.productName}</strong> from inventory
+              <span className="block mt-1 text-xs text-amber-600">
+                ⚠️ Top-up history for this item will also be removed.
+              </span>
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reason for Deletion</label>
+              <div className="grid grid-cols-2 gap-2">
+                {DELETE_REASONS.map(reason => (
+                  <button
+                    key={reason.value}
+                    onClick={() => setDeleteReason(reason.value)}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all text-left ${
+                      deleteReason === reason.value
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span className="text-lg">{reason.icon}</span>
+                    <span className="flex-1">{reason.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className={`p-3 rounded-lg border text-sm ${
+                deleteReason === "return_to_supplier" 
+                  ? "bg-green-50 border-green-200" 
+                  : "bg-red-50 border-red-200"
+              }`}>
+                {deleteReason === "return_to_supplier" ? (
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 font-semibold">💰 Refund:</span>
+                    <span className="text-green-700">
+                      This will <strong>decrease</strong> your total expenses (refund received)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <span className="text-red-600 font-semibold">📉 Loss:</span>
+                    <span className="text-red-700">
+                      This will <strong>increase</strong> your total expenses (counted as loss)
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Notes <span className="text-muted-foreground font-normal">(optional)</span></label>
+              <Textarea
+                placeholder="Add notes about this deletion..."
+                value={deleteNotes}
+                onChange={e => setDeleteNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setDeleteConfirmOpen(false); setItemToDelete(null); }}>
+            <Button variant="outline" onClick={() => { 
+              setDeleteConfirmOpen(false); 
+              setItemToDelete(null); 
+              setDeleteReason("expired");
+              setDeleteNotes("");
+            }}>
               {t.common.cancel}
             </Button>
             <Button
               className="bg-red-600 hover:bg-red-700"
               onClick={() => {
-                if (itemToDelete) { onDeleteStock(itemToDelete.id); }
+                if (itemToDelete) { 
+                  onDeleteStock(itemToDelete.id, deleteReason, deleteNotes); 
+                }
                 setDeleteConfirmOpen(false);
                 setItemToDelete(null);
+                setDeleteReason("expired");
+                setDeleteNotes("");
               }}
             >
-              <Trash2 className="h-4 w-4 mr-2" />{t.common.delete}
+              <Trash2 className="h-4 w-4 mr-2" />Delete Product
             </Button>
           </DialogFooter>
         </DialogContent>
