@@ -3,7 +3,7 @@ import {
   Package2, Plus, Minus, Trash2, AlertTriangle, CheckCircle2,
   Clock, XCircle, ChevronDown, ChevronUp, Search, History,
   RefreshCw, ArrowDownCircle, ArrowUpCircle, Link2, TrendingDown,
-  BarChart3, Square, CheckSquare, Edit,
+  BarChart3, Square, CheckSquare, Edit, MoreVertical, Upload, Eye, EyeOff,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -14,11 +14,47 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "./ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
 import { StockItem, StockAdjustment, UnitType, Expense } from "../types/business";
 import { useLanguage } from "../contexts/LanguageContext";
 
 const UNITS: UnitType[] = ["unit", "kg", "gram", "liter", "ml", "piece"];
 const LOW_STOCK_THRESHOLD = 10;
+
+// Delete reasons with financial impact
+const DELETE_REASONS = [
+  { value: "return_to_supplier", label: "Return to Supplier", impact: "refund", icon: "↩️" },
+  { value: "expired", label: "Expired", impact: "loss", icon: "⏰" },
+  { value: "spoiled", label: "Spoiled", impact: "loss", icon: "🦠" },
+  { value: "lost", label: "Lost", impact: "loss", icon: "❓" },
+  { value: "damaged", label: "Damaged", impact: "loss", icon: "💔" },
+  { value: "other", label: "Other", impact: "loss", icon: "📝" },
+] as const;
+
+type DeleteReason = typeof DELETE_REASONS[number]["value"];
+
+interface DeleteRecord {
+  id: string;
+  stockItemId: string;
+  productName: string;
+  quantity: number;
+  unit: UnitType;
+  costPerUnit: number;
+  totalValue: number;
+  reason: DeleteReason;
+  financialImpact: "refund" | "loss";
+  impactAmount: number;
+  date: Date;
+  notes?: string;
+}
 
 function getStockStatus(item: StockItem) {
   const today = new Date();
@@ -67,9 +103,11 @@ interface StockManagementProps {
   stockItems: StockItem[];
   stockAdjustments: StockAdjustment[];
   expenses: Expense[];
+  deleteRecords: DeleteRecord[];
   onAddStock: (item: Omit<StockItem, "id" | "addedDate">, qty: number) => void;
   onReduceStock: (itemId: string, qty: number, reason: string, notes: string, costPerUnit?: number) => void;
-  onDeleteStock: (itemId: string) => void;
+  onDeleteStock: (itemId: string, reason: DeleteReason, notes: string) => void;
+  onUpdateStock: (itemId: string, updates: Partial<StockItem>) => void;
 }
 interface AddStockForm {
   productName: string; category: string; quantity: string; unit: UnitType;
@@ -80,7 +118,7 @@ interface ReduceForm { quantity: string; reason: string; notes: string; }
 type ActiveTab = "inventory" | "history" | "report";
 
 export function StockManagement({
-  stockItems, stockAdjustments, expenses, onAddStock, onReduceStock, onDeleteStock,
+  stockItems, stockAdjustments, expenses, deleteRecords, onAddStock, onReduceStock, onDeleteStock, onUpdateStock,
 }: StockManagementProps) {
   const { t } = useLanguage();
   const s = t.stock;
@@ -138,7 +176,27 @@ export function StockManagement({
   // -- Delete confirm dialog --------------------------------------------------
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<StockItem | null>(null);
+  const [deleteReason, setDeleteReason] = useState<DeleteReason>("expired");
+  const [deleteNotes, setDeleteNotes] = useState("");
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+
+  // -- Enhanced edit dialog ---------------------------------------------------
+  const [enhancedEditOpen, setEnhancedEditOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<StockItem | null>(null);
+  const [editForm, setEditForm] = useState({
+    productName: "",
+    category: "",
+    quantity: "",
+    unit: "unit" as UnitType,
+    sellingPrice: "",
+    costPerUnit: "",
+    expiryDate: "",
+    notes: "",
+    imageUrl: "",
+  });
+
+  // -- Image upload -----------------------------------------------------------
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // -- Derived data -----------------------------------------------------------
   const costMap = useMemo(() => {
