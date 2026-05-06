@@ -132,6 +132,7 @@ export function StockManagement({
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false); // New: Select mode toggle
 
   // -- History state ----------------------------------------------------------
   const [historyShowAll, setHistoryShowAll] = useState(false);
@@ -194,6 +195,11 @@ export function StockManagement({
   const [productToDelete, setProductToDelete] = useState<string>("");
   const [editingProductId, setEditingProductId] = useState("");
   
+  // -- Product Management Dialog (unified) ------------------------------------
+  const [productManageOpen, setProductManageOpen] = useState(false);
+  const [managingProduct, setManagingProduct] = useState<Product | null>(null);
+  const [manageAction, setManageAction] = useState<"edit" | "topup" | "reduce" | "delete" | null>(null);
+  
   const BLANK_PRODUCT = {
     name: "",
     category: "",
@@ -210,6 +216,36 @@ export function StockManagement({
   const [newProductError, setNewProductError] = useState("");
 
   // -- Derived data -----------------------------------------------------------
+  // Merge products with stock items to create unified inventory
+  const mergedInventory = useMemo(() => {
+    return products.map(product => {
+      // Find matching stock item by product name
+      const stockItem = stockItems.find(
+        s => s.productName.toLowerCase() === product.name.toLowerCase()
+      );
+      
+      return {
+        id: product.id,
+        productId: product.id,
+        stockItemId: stockItem?.id,
+        name: product.name,
+        category: product.category,
+        price: product.price,
+        cost: product.cost,
+        unit: product.unit,
+        imageUrl: product.imageUrl,
+        showInOrders: product.showInOrders !== false,
+        // Stock data
+        quantity: stockItem?.quantity ?? 0,
+        expiryDate: stockItem?.expiryDate,
+        addedDate: stockItem?.addedDate,
+        notes: stockItem?.notes,
+        costPerUnit: stockItem?.costPerUnit ?? product.cost,
+        sellingPrice: stockItem?.sellingPrice ?? product.price,
+      };
+    });
+  }, [products, stockItems]);
+
   const costMap = useMemo(() => {
     const map = new Map<string, { avgCost: number; totalSpent: number; lastCost: number }>();
     stockItems.forEach(item => {
@@ -235,30 +271,72 @@ export function StockManagement({
   );
 
   const stats = useMemo(() => {
-    const statuses = stockItems.map(getStockStatus);
+    const statuses = mergedInventory.map(item => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (item.quantity === 0) return "out";
+      if (item.expiryDate) {
+        const exp = new Date(item.expiryDate);
+        exp.setHours(0, 0, 0, 0);
+        if (exp < today) return "expired";
+        const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
+        if (diffDays <= 7) return "expiring_soon";
+      }
+      if (item.quantity <= LOW_STOCK_THRESHOLD) return "low";
+      return "good";
+    });
     return {
-      total: stockItems.length,
+      total: mergedInventory.length,
       good: statuses.filter(s => s === "good").length,
       low: statuses.filter(s => s === "low").length,
       out: statuses.filter(s => s === "out").length,
       expiringSoon: statuses.filter(s => s === "expiring_soon").length,
       expired: statuses.filter(s => s === "expired").length,
     };
-  }, [stockItems]);
+  }, [mergedInventory]);
 
   const filtered = useMemo(() =>
-    stockItems
+    mergedInventory
       .filter(item => {
-        const matchSearch = item.productName.toLowerCase().includes(search.toLowerCase()) ||
+        const matchSearch = item.name.toLowerCase().includes(search.toLowerCase()) ||
           item.category.toLowerCase().includes(search.toLowerCase());
-        const status = getStockStatus(item);
+        
+        // Calculate status based on stock quantity
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let status = "good";
+        if (item.quantity === 0) status = "out";
+        else if (item.expiryDate) {
+          const exp = new Date(item.expiryDate);
+          exp.setHours(0, 0, 0, 0);
+          if (exp < today) status = "expired";
+          else {
+            const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
+            if (diffDays <= 7) status = "expiring_soon";
+          }
+        } else if (item.quantity <= LOW_STOCK_THRESHOLD) status = "low";
+        
         return matchSearch && (filterStatus === "all" || status === filterStatus);
       })
       .sort((a, b) => {
-        const order: Record<string, number> = { expired: 0, expiring_soon: 1, out: 2, low: 3, good: 4 };
-        return (order[getStockStatus(a)] ?? 5) - (order[getStockStatus(b)] ?? 5);
+        // Sort by status priority
+        const getStatusPriority = (item: typeof mergedInventory[0]) => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (item.quantity === 0) return 0; // out
+          if (item.expiryDate) {
+            const exp = new Date(item.expiryDate);
+            exp.setHours(0, 0, 0, 0);
+            if (exp < today) return 1; // expired
+            const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
+            if (diffDays <= 7) return 2; // expiring_soon
+          }
+          if (item.quantity <= LOW_STOCK_THRESHOLD) return 3; // low
+          return 4; // good
+        };
+        return getStatusPriority(a) - getStatusPriority(b);
       }),
-    [stockItems, search, filterStatus]
+    [mergedInventory, search, filterStatus]
   );
 
   // Top-up history only (reason === "received"), filtered to only active stock items
@@ -271,9 +349,42 @@ export function StockManagement({
   );
   const HISTORY_LIMIT = 20;
 
-  const alertItems = stockItems.filter(i => ["expired", "expiring_soon", "out"].includes(getStockStatus(i)));
+  const alertItems = mergedInventory.filter(item => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (item.quantity === 0) return true;
+    if (item.expiryDate) {
+      const exp = new Date(item.expiryDate);
+      exp.setHours(0, 0, 0, 0);
+      if (exp < today) return true;
+      const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
+      if (diffDays <= 7) return true;
+    }
+    return false;
+  });
 
   // -- Handlers ---------------------------------------------------------------
+  // Helper to get or create stock item for a product
+  const getOrCreateStockItem = (productId: string): StockItem | null => {
+    const product = products.find(p => p.id === productId);
+    if (!product) return null;
+    
+    const existing = stockItems.find(
+      s => s.productName.toLowerCase() === product.name.toLowerCase()
+    );
+    
+    return existing || null;
+  };
+
+  // Open product management dialog
+  const openProductManage = (item: typeof mergedInventory[0]) => {
+    const product = products.find(p => p.id === item.productId);
+    if (product) {
+      setManagingProduct(product);
+      setProductManageOpen(true);
+    }
+  };
+
   const handleAddSubmit = () => {
     if (!addForm.productName.trim() || !addForm.quantity || parseFloat(addForm.quantity) <= 0) return;
     const isDuplicate = stockItems.some(
@@ -312,14 +423,60 @@ export function StockManagement({
     setReduceOpen(false); setReduceForm({ quantity: "", reason: "sold", notes: "" }); setReduceItem(null);
   };
 
-  const openReduce = (item: StockItem) => { setReduceItem(item); setReduceForm({ quantity: "", reason: "sold", notes: "" }); setReduceOpen(true); };
-  const openTopUp  = (item: StockItem) => { setTopUpItem(item); setTopUpQty(""); setTopUpNotes(""); setTopUpCost(""); setTopUpOpen(true); };
-  const confirmDelete = (item: StockItem) => { setItemToDelete(item); setDeleteConfirmOpen(true); };
-  const openEditQty = (item: StockItem) => { 
-    setEditQtyItem(item); 
-    setEditQtyValue(item.quantity.toString()); 
-    setEditQtyNotes(""); 
-    setEditQtyOpen(true); 
+  const openReduce = (item: typeof mergedInventory[0]) => {
+    if (!item.stockItemId) return;
+    const stockItem = stockItems.find(s => s.id === item.stockItemId);
+    if (stockItem) {
+      setReduceItem(stockItem);
+      setReduceForm({ quantity: "", reason: "sold", notes: "" });
+      setReduceOpen(true);
+    }
+  };
+  
+  const openTopUp = (item: typeof mergedInventory[0]) => {
+    // If no stock item exists, create one first
+    if (!item.stockItemId) {
+      // Auto-create stock item
+      const newStockItem: StockItem = {
+        id: Date.now().toString() + "_stock",
+        productName: item.name,
+        category: item.category,
+        quantity: 0,
+        unit: item.unit,
+        costPerUnit: item.cost,
+        sellingPrice: item.price,
+        addedDate: new Date(),
+        notes: "Auto-created from product",
+      };
+      setTopUpItem(newStockItem);
+    } else {
+      const stockItem = stockItems.find(s => s.id === item.stockItemId);
+      if (stockItem) setTopUpItem(stockItem);
+    }
+    setTopUpQty("");
+    setTopUpNotes("");
+    setTopUpCost("");
+    setTopUpOpen(true);
+  };
+  
+  const confirmDelete = (item: typeof mergedInventory[0]) => {
+    if (!item.stockItemId) return;
+    const stockItem = stockItems.find(s => s.id === item.stockItemId);
+    if (stockItem) {
+      setItemToDelete(stockItem);
+      setDeleteConfirmOpen(true);
+    }
+  };
+  
+  const openEditQty = (item: typeof mergedInventory[0]) => {
+    if (!item.stockItemId) return;
+    const stockItem = stockItems.find(s => s.id === item.stockItemId);
+    if (stockItem) {
+      setEditQtyItem(stockItem);
+      setEditQtyValue(stockItem.quantity.toString());
+      setEditQtyNotes("");
+      setEditQtyOpen(true);
+    }
   };
 
   const handleEditQtySubmit = () => {
@@ -559,42 +716,51 @@ export function StockManagement({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem
-                  onClick={() => setAddOpen(true)}
+                  onClick={() => {
+                    setSelectMode(!selectMode);
+                    if (selectMode) setSelectedItems(new Set()); // Clear selection when exiting
+                  }}
                   className="flex items-center gap-2 cursor-pointer"
                 >
-                  <Plus className="h-4 w-4 text-green-600" />
-                  <span>Add New Product</span>
+                  {selectMode ? <Square className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
+                  <span>{selectMode ? "Exit Select Mode" : "Select Mode"}</span>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={selectAll}
-                  disabled={filtered.length === 0}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <CheckSquare className="h-4 w-4" />
-                  <span>Select All</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={deselectAll}
-                  disabled={selectedItems.size === 0}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <Square className="h-4 w-4" />
-                  <span>Clear Selection</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setBulkDeleteConfirmOpen(true)}
-                  disabled={selectedItems.size === 0}
-                  className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-600"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Delete Selected ({selectedItems.size})</span>
-                </DropdownMenuItem>
+                {selectMode && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={selectAll}
+                      disabled={filtered.length === 0}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <CheckSquare className="h-4 w-4" />
+                      <span>Select All</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={deselectAll}
+                      disabled={selectedItems.size === 0}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Square className="h-4 w-4" />
+                      <span>Clear Selection</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
             
-            {/* Bulk action buttons (shown when items selected) - REMOVED, now in dropdown */}
+            {/* Delete button (shown in select mode) */}
+            {selectMode && selectedItems.size > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteConfirmOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete ({selectedItems.size})
+              </Button>
+            )}
           </div>
 
           {/* Stock Card Grid */}
@@ -610,10 +776,23 @@ export function StockManagement({
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {filtered.map(item => {
-                const status = getStockStatus(item);
-                const avgCost = costMap.get(item.id)?.avgCost ?? 0;
+                // Calculate status
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                let status = "good";
+                if (item.quantity === 0) status = "out";
+                else if (item.expiryDate) {
+                  const exp = new Date(item.expiryDate);
+                  exp.setHours(0, 0, 0, 0);
+                  if (exp < today) status = "expired";
+                  else {
+                    const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
+                    if (diffDays <= 7) status = "expiring_soon";
+                  }
+                } else if (item.quantity <= LOW_STOCK_THRESHOLD) status = "low";
+
+                const avgCost = item.costPerUnit ?? item.cost;
                 const stockValue = item.quantity * avgCost;
-                const isExpenseLinked = expenses.some(e => e.productName.toLowerCase() === item.productName.toLowerCase());
                 const expDays = item.expiryDate ? daysUntilExpiry(item.expiryDate) : 0;
 
                 const statusBorderColor =
@@ -626,299 +805,118 @@ export function StockManagement({
                 return (
                   <Card
                     key={item.id}
-                    className={`relative group transition-all ${statusBorderColor} ${
+                    className={`relative group transition-all cursor-pointer ${statusBorderColor} ${
                       selectedItems.has(item.id) ? "ring-2 ring-primary" : ""
                     }`}
+                    onClick={() => {
+                      if (selectMode) {
+                        toggleSelection(item.id);
+                      } else {
+                        openProductManage(item);
+                      }
+                    }}
                   >
                     <CardContent className="p-4">
-                      {/* Checkbox for selection - top left */}
-                      <div className="absolute top-2 left-2 z-10">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleSelection(item.id);
-                          }}
-                          className="h-6 w-6 rounded border-2 border-muted-foreground/30 bg-background hover:border-primary transition-colors flex items-center justify-center"
-                        >
-                          {selectedItems.has(item.id) ? (
-                            <CheckSquare className="h-5 w-5 text-primary" />
-                          ) : (
-                            <Square className="h-5 w-5 text-muted-foreground/50" />
-                          )}
-                        </button>
-                      </div>
+                      {/* Checkbox for selection - shown only in select mode */}
+                      {selectMode && (
+                        <div className="absolute top-2 left-2 z-10">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSelection(item.id);
+                            }}
+                            className="h-6 w-6 rounded border-2 border-muted-foreground/30 bg-background hover:border-primary transition-colors flex items-center justify-center"
+                          >
+                            {selectedItems.has(item.id) ? (
+                              <CheckSquare className="h-5 w-5 text-primary" />
+                            ) : (
+                              <Square className="h-5 w-5 text-muted-foreground/50" />
+                            )}
+                          </button>
+                        </div>
+                      )}
 
-                      {/* Actions dropdown menu – top right */}
-                      <div className="absolute top-2 right-2 z-20">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 bg-background/95 hover:bg-background shadow-sm border border-border/50"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48 z-50">
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openTopUp(item);
-                              }}
-                              className="flex items-center gap-2 cursor-pointer"
-                            >
-                              <Plus className="h-4 w-4 text-green-600" />
-                              <span>Top Up Stock</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEditQty(item);
-                              }}
-                              className="flex items-center gap-2 cursor-pointer"
-                            >
-                              <Edit className="h-4 w-4 text-blue-600" />
-                              <span>Edit Quantity</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openReduce(item);
-                              }}
-                              disabled={item.quantity === 0}
-                              className="flex items-center gap-2 cursor-pointer"
-                            >
-                              <Minus className="h-4 w-4 text-orange-600" />
-                              <span>Reduce Stock</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                confirmDelete(item);
-                              }}
-                              className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span>Delete Product</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-
-                      {/* Card body - click to top up */}
-                      <div
-                        className="cursor-pointer"
-                        onClick={() => openTopUp(item)}
-                      >
-                        {/* Card icon area */}
-                        <div className={`aspect-square rounded-lg mb-2 flex flex-col items-center justify-center relative overflow-hidden
-                          ${status === "expired" ? "bg-red-100" :
-                            status === "expiring_soon" ? "bg-orange-100" :
-                            status === "out" ? "bg-red-50" :
-                            status === "low" ? "bg-amber-50" :
-                            "bg-muted"}`}>
-                          <Package2 className={`h-7 w-7 mb-1
+                      {/* Product image or icon */}
+                      <div className={`aspect-square rounded-lg mb-2 flex flex-col items-center justify-center relative overflow-hidden
+                        ${status === "expired" ? "bg-red-100" :
+                          status === "expiring_soon" ? "bg-orange-100" :
+                          status === "out" ? "bg-red-50" :
+                          status === "low" ? "bg-amber-50" :
+                          "bg-muted"}`}>
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package2 className={`h-7 w-7
                             ${status === "expired" || status === "out" ? "text-red-400" :
                               status === "expiring_soon" ? "text-orange-400" :
                               status === "low" ? "text-amber-500" :
                               "text-muted-foreground"}`} />
-                          <span className={`text-lg font-bold leading-none
-                            ${item.quantity === 0 ? "text-red-600" :
-                              item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" :
-                              "text-foreground"}`}>
-                            {item.quantity}
+                        )}
+                        
+                        {/* Stock quantity overlay */}
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-1 text-center">
+                          <span className={`text-sm font-bold
+                            ${item.quantity === 0 ? "text-red-300" :
+                              item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-300" :
+                              "text-white"}`}>
+                            {item.quantity} {item.unit}
                           </span>
-                          <span className="text-xs text-muted-foreground">{item.unit}</span>
-                          {/* Top-up hint overlay */}
-                          <div className="absolute inset-0 bg-green-600/80 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="text-white text-center">
-                              <Plus className="h-6 w-6 mx-auto mb-0.5" />
-                              <span className="text-xs font-semibold">{s.topUp}</span>
-                            </div>
-                          </div>
                         </div>
-
-                        {/* Product name */}
-                        <h4 className="font-medium text-sm truncate" title={item.productName}>{item.productName}</h4>
-
-                        {/* Category badge */}
-                        <p className="text-xs text-muted-foreground truncate">{item.category}</p>
-
-                        {/* Status badge */}
-                        <div className="mt-1.5">
-                          <StatusBadge status={status} labels={statusLabels} />
-                        </div>
-
-                        {/* Cost / value */}
-                        {avgCost > 0 && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            RM {avgCost.toFixed(2)}/{item.unit}
-                            {stockValue > 0 && <span className="text-primary font-semibold ml-1">= RM {stockValue.toFixed(2)}</span>}
-                          </p>
-                        )}
-
-                        {/* Expiry */}
-                        {item.expiryDate && (
-                          <p className={`text-xs mt-0.5 ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : "text-muted-foreground"}`}>
-                            {status === "expiring_soon" ? `${expDays}d left` :
-                             status === "expired" ? `${Math.abs(expDays)}d ago` :
-                             new Date(item.expiryDate).toLocaleDateString()}
-                          </p>
-                        )}
-
-                        {/* Expense linked badge */}
-                        {isExpenseLinked && (
-                          <span className="inline-flex items-center gap-0.5 text-xs text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full mt-1">
-                            <Link2 className="h-2.5 w-2.5" />{s.expenseLinked}
-                          </span>
-                        )}
                       </div>
+
+                      {/* Product name */}
+                      <h4 className="font-medium text-sm truncate" title={item.name}>{item.name}</h4>
+
+                      {/* Category */}
+                      <p className="text-xs text-muted-foreground truncate">{item.category}</p>
+
+                      {/* Price and Status */}
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs font-semibold text-primary">RM {item.price.toFixed(2)}</span>
+                        <StatusBadge status={status} labels={statusLabels} />
+                      </div>
+
+                      {/* Stock value */}
+                      {avgCost > 0 && stockValue > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Value: <span className="text-primary font-semibold">RM {stockValue.toFixed(2)}</span>
+                        </p>
+                      )}
+
+                      {/* Expiry warning */}
+                      {item.expiryDate && (
+                        <p className={`text-xs mt-0.5 ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : "text-muted-foreground"}`}>
+                          {status === "expiring_soon" ? `⏰ ${expDays}d left` :
+                           status === "expired" ? `⏰ ${Math.abs(expDays)}d ago` :
+                           `Exp: ${new Date(item.expiryDate).toLocaleDateString()}`}
+                        </p>
+                      )}
+
+                      {/* Visibility badge */}
+                      {!item.showInOrders && (
+                        <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground bg-muted border px-1.5 py-0.5 rounded-full mt-1">
+                          <EyeOff className="h-2.5 w-2.5" />Hidden
+                        </span>
+                      )}
                     </CardContent>
                   </Card>
                 );
               })}
 
-              {/* Add new stock card */}
+              {/* Add new product card */}
               <Card
                 className="cursor-pointer hover:border-primary transition-colors border-dashed"
-                onClick={() => setAddOpen(true)}
+                onClick={() => setProductDialogOpen(true)}
               >
                 <CardContent className="p-4">
                   <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center">
                     <Plus className="h-8 w-8 text-muted-foreground" />
                   </div>
-                  <h4 className="font-medium text-sm text-center">{s.addStockItem}</h4>
+                  <h4 className="font-medium text-sm text-center">Add Product</h4>
                 </CardContent>
               </Card>
             </div>
           )}
-
-          {/* ========== PRODUCT MANAGEMENT SECTION ========== */}
-          <div className="mt-8 pt-8 border-t">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold">Product Catalog</h3>
-                <p className="text-sm text-muted-foreground">Manage products available for orders</p>
-              </div>
-              <Button onClick={() => setProductDialogOpen(true)} className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />Add Product
-              </Button>
-            </div>
-
-            {/* Product Grid */}
-            {products.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
-                <Package2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">No products yet</p>
-                <p className="text-sm mt-1">Add products to make them available in orders</p>
-                <Button className="mt-4" onClick={() => setProductDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />Add Your First Product
-                </Button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {products.map(product => {
-                  const visible = product.showInOrders !== false;
-                  return (
-                    <Card
-                      key={product.id}
-                      className={`relative group transition-colors ${visible ? "hover:border-primary" : "opacity-60 border-dashed hover:border-muted-foreground"}`}
-                    >
-                      <CardContent className="p-4">
-                        {/* Action buttons top-right */}
-                        <div className="absolute top-1 right-1 flex gap-1 z-10">
-                          {/* Visibility toggle */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title={visible ? "Hide from Orders" : "Show in Orders"}
-                            className={`h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity ${visible ? "text-green-600 hover:text-red-500" : "text-muted-foreground hover:text-green-600"}`}
-                            onClick={(e) => { e.stopPropagation(); handleToggleVisibility(product); }}
-                          >
-                            {visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                          </Button>
-                          {/* Edit button */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingProductId(product.id);
-                              setEditProduct({
-                                name: product.name,
-                                category: product.category,
-                                price: product.price,
-                                cost: product.cost,
-                                unit: product.unit,
-                                stock: product.stock,
-                                imageUrl: product.imageUrl || "",
-                                showInOrders: product.showInOrders !== false,
-                              });
-                              setEditProductDialogOpen(true);
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          {/* Delete button */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setProductToDelete(product.id);
-                              setDeleteProductConfirmOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-
-                        {/* Card body */}
-                        <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center overflow-hidden relative">
-                          {product.imageUrl ? (
-                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <Package2 className="h-6 w-6 text-muted-foreground" />
-                          )}
-                          {!visible && (
-                            <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-lg">
-                              <EyeOff className="h-5 w-5 text-white" />
-                            </div>
-                          )}
-                        </div>
-                        <h4 className="font-medium text-sm truncate">{product.name}</h4>
-                        <p className="text-xs text-muted-foreground">{product.category}</p>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-xs font-semibold text-primary">RM {product.price.toFixed(2)}</span>
-                          <span className={`text-xs font-semibold ${visible ? "text-green-600" : "text-muted-foreground"}`}>
-                            {visible ? "In Orders" : "Hidden"}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-
-                {/* Add New Product Card */}
-                <Card
-                  className="cursor-pointer hover:border-primary transition-colors border-dashed"
-                  onClick={() => setProductDialogOpen(true)}
-                >
-                  <CardContent className="p-4">
-                    <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center">
-                      <Plus className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                    <h4 className="font-medium text-sm text-center">Add Product</h4>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </div>
         </div>
       )}
       {/* -- TOP-UP HISTORY TAB ---------------------------------------------------- */}
@@ -1583,6 +1581,146 @@ export function StockManagement({
 
       {/* ========== PRODUCT MANAGEMENT DIALOGS ========== */}
       
+      {/* Product Management Dialog (unified actions) */}
+      <Dialog open={productManageOpen} onOpenChange={setProductManageOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage {managingProduct?.name}</DialogTitle>
+            <DialogDescription>Choose an action for this product</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-4">
+            <Button
+              variant="outline"
+              className="h-auto py-4 justify-start"
+              onClick={() => {
+                setProductManageOpen(false);
+                if (managingProduct) {
+                  const mergedItem = mergedInventory.find(i => i.productId === managingProduct.id);
+                  if (mergedItem) openTopUp(mergedItem);
+                }
+              }}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                  <Plus className="h-5 w-5 text-green-600" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold">Top Up Stock</p>
+                  <p className="text-xs text-muted-foreground">Add more inventory</p>
+                </div>
+              </div>
+            </Button>
+            
+            <Button
+              variant="outline"
+              className="h-auto py-4 justify-start"
+              onClick={() => {
+                setProductManageOpen(false);
+                if (managingProduct) {
+                  const mergedItem = mergedInventory.find(i => i.productId === managingProduct.id);
+                  if (mergedItem) openEditQty(mergedItem);
+                }
+              }}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                  <Edit className="h-5 w-5 text-blue-600" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold">Edit Quantity</p>
+                  <p className="text-xs text-muted-foreground">Set exact stock amount</p>
+                </div>
+              </div>
+            </Button>
+            
+            <Button
+              variant="outline"
+              className="h-auto py-4 justify-start"
+              onClick={() => {
+                setProductManageOpen(false);
+                if (managingProduct) {
+                  const mergedItem = mergedInventory.find(i => i.productId === managingProduct.id);
+                  if (mergedItem) openReduce(mergedItem);
+                }
+              }}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
+                  <Minus className="h-5 w-5 text-orange-600" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold">Reduce Stock</p>
+                  <p className="text-xs text-muted-foreground">Sold, expired, lost, damaged</p>
+                </div>
+              </div>
+            </Button>
+            
+            <Button
+              variant="outline"
+              className="h-auto py-4 justify-start"
+              onClick={() => {
+                setProductManageOpen(false);
+                if (managingProduct) {
+                  setEditingProductId(managingProduct.id);
+                  setEditProduct({
+                    name: managingProduct.name,
+                    category: managingProduct.category,
+                    price: managingProduct.price,
+                    cost: managingProduct.cost,
+                    unit: managingProduct.unit,
+                    stock: managingProduct.stock,
+                    imageUrl: managingProduct.imageUrl || "",
+                    showInOrders: managingProduct.showInOrders !== false,
+                  });
+                  setEditProductDialogOpen(true);
+                }
+              }}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
+                  <Edit className="h-5 w-5 text-purple-600" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold">Edit Product Details</p>
+                  <p className="text-xs text-muted-foreground">Name, price, category, image</p>
+                </div>
+              </div>
+            </Button>
+            
+            <Button
+              variant="outline"
+              className="h-auto py-4 justify-start border-red-200 hover:bg-red-50"
+              onClick={() => {
+                setProductManageOpen(false);
+                if (managingProduct) {
+                  const mergedItem = mergedInventory.find(i => i.productId === managingProduct.id);
+                  if (mergedItem && mergedItem.stockItemId) {
+                    const stockItem = stockItems.find(s => s.id === mergedItem.stockItemId);
+                    if (stockItem) {
+                      setItemToDelete(stockItem);
+                      setDeleteConfirmOpen(true);
+                    }
+                  }
+                }
+              }}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <Trash2 className="h-5 w-5 text-red-600" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-red-600">Delete Stock</p>
+                  <p className="text-xs text-muted-foreground">Return to supplier, expired, lost</p>
+                </div>
+              </div>
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProductManageOpen(false)}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Add Product Dialog */}
       <Dialog open={productDialogOpen} onOpenChange={(v) => { setProductDialogOpen(v); if (!v) { setNewProductError(""); setNewProduct({ ...BLANK_PRODUCT }); } }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
