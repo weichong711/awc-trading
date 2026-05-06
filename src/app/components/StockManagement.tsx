@@ -274,7 +274,12 @@ export function StockManagement({
     const statuses = mergedInventory.map(item => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      if (item.quantity === 0) return "out";
+      const hasStockHistory = item.stockItemId !== undefined;
+      
+      // Only show "out" status if product had stock before
+      if (item.quantity === 0 && hasStockHistory) return "out";
+      if (item.quantity === 0 && !hasStockHistory) return "good"; // New product
+      
       if (item.expiryDate) {
         const exp = new Date(item.expiryDate);
         exp.setHours(0, 0, 0, 0);
@@ -282,7 +287,7 @@ export function StockManagement({
         const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
         if (diffDays <= 7) return "expiring_soon";
       }
-      if (item.quantity <= LOW_STOCK_THRESHOLD) return "low";
+      if (item.quantity <= LOW_STOCK_THRESHOLD && item.quantity > 0) return "low";
       return "good";
     });
     return {
@@ -305,8 +310,14 @@ export function StockManagement({
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         let status = "good";
-        if (item.quantity === 0) status = "out";
-        else if (item.expiryDate) {
+        const hasStockHistory = item.stockItemId !== undefined;
+        
+        // Only show "out" status if product had stock before
+        if (item.quantity === 0 && hasStockHistory) {
+          status = "out";
+        } else if (item.quantity === 0 && !hasStockHistory) {
+          status = "good"; // New product, not an alert
+        } else if (item.expiryDate) {
           const exp = new Date(item.expiryDate);
           exp.setHours(0, 0, 0, 0);
           if (exp < today) status = "expired";
@@ -314,7 +325,9 @@ export function StockManagement({
             const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
             if (diffDays <= 7) status = "expiring_soon";
           }
-        } else if (item.quantity <= LOW_STOCK_THRESHOLD) status = "low";
+        } else if (item.quantity <= LOW_STOCK_THRESHOLD && item.quantity > 0) {
+          status = "low";
+        }
         
         return matchSearch && (filterStatus === "all" || status === filterStatus);
       })
@@ -323,7 +336,9 @@ export function StockManagement({
         const getStatusPriority = (item: typeof mergedInventory[0]) => {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          if (item.quantity === 0) return 0; // out
+          const hasStockHistory = item.stockItemId !== undefined;
+          
+          if (item.quantity === 0 && hasStockHistory) return 0; // out (only if had stock)
           if (item.expiryDate) {
             const exp = new Date(item.expiryDate);
             exp.setHours(0, 0, 0, 0);
@@ -331,7 +346,7 @@ export function StockManagement({
             const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
             if (diffDays <= 7) return 2; // expiring_soon
           }
-          if (item.quantity <= LOW_STOCK_THRESHOLD) return 3; // low
+          if (item.quantity <= LOW_STOCK_THRESHOLD && item.quantity > 0) return 3; // low
           return 4; // good
         };
         return getStatusPriority(a) - getStatusPriority(b);
@@ -352,7 +367,13 @@ export function StockManagement({
   const alertItems = mergedInventory.filter(item => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (item.quantity === 0) return true;
+    
+    // Don't show "out of stock" alerts for products that never had stock (new products)
+    // Only alert if they had stock before or have expiry issues
+    const hasStockHistory = item.stockItemId !== undefined;
+    
+    if (item.quantity === 0 && hasStockHistory) return true; // Only alert if stock existed before
+    
     if (item.expiryDate) {
       const exp = new Date(item.expiryDate);
       exp.setHours(0, 0, 0, 0);
@@ -529,7 +550,15 @@ export function StockManagement({
 
   const handleBulkDelete = () => {
     selectedItems.forEach(itemId => {
-      onDeleteStock(itemId, "other", "Bulk delete");
+      // Find the merged item
+      const mergedItem = mergedInventory.find(i => i.id === itemId);
+      if (mergedItem && mergedItem.stockItemId) {
+        // Only delete if there's actual stock
+        onDeleteStock(mergedItem.stockItemId, "other", "Bulk delete");
+      } else if (mergedItem) {
+        // If no stock item exists, just delete the product
+        onDeleteProduct(mergedItem.productId);
+      }
     });
     setSelectedItems(new Set());
     setBulkDeleteConfirmOpen(false);
@@ -589,9 +618,6 @@ export function StockManagement({
           </h2>
           <p className="text-sm text-muted-foreground">{s.description}</p>
         </div>
-        <Button onClick={() => setAddOpen(true)} variant="outline" className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />{s.manualEntry}
-        </Button>
       </div>
 
       {/* Info banner */}
@@ -780,8 +806,14 @@ export function StockManagement({
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 let status = "good";
-                if (item.quantity === 0) status = "out";
-                else if (item.expiryDate) {
+                const hasStockHistory = item.stockItemId !== undefined;
+                
+                // Only show "out" status if product had stock before
+                if (item.quantity === 0 && hasStockHistory) {
+                  status = "out";
+                } else if (item.quantity === 0 && !hasStockHistory) {
+                  status = "good"; // New product, not an alert
+                } else if (item.expiryDate) {
                   const exp = new Date(item.expiryDate);
                   exp.setHours(0, 0, 0, 0);
                   if (exp < today) status = "expired";
@@ -789,7 +821,9 @@ export function StockManagement({
                     const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
                     if (diffDays <= 7) status = "expiring_soon";
                   }
-                } else if (item.quantity <= LOW_STOCK_THRESHOLD) status = "low";
+                } else if (item.quantity <= LOW_STOCK_THRESHOLD && item.quantity > 0) {
+                  status = "low";
+                }
 
                 const avgCost = item.costPerUnit ?? item.cost;
                 const stockValue = item.quantity * avgCost;
@@ -1694,11 +1728,18 @@ export function StockManagement({
                 setProductManageOpen(false);
                 if (managingProduct) {
                   const mergedItem = mergedInventory.find(i => i.productId === managingProduct.id);
-                  if (mergedItem && mergedItem.stockItemId) {
-                    const stockItem = stockItems.find(s => s.id === mergedItem.stockItemId);
-                    if (stockItem) {
-                      setItemToDelete(stockItem);
-                      setDeleteConfirmOpen(true);
+                  if (mergedItem) {
+                    if (mergedItem.stockItemId) {
+                      // Has stock - use stock delete with financial tracking
+                      const stockItem = stockItems.find(s => s.id === mergedItem.stockItemId);
+                      if (stockItem) {
+                        setItemToDelete(stockItem);
+                        setDeleteConfirmOpen(true);
+                      }
+                    } else {
+                      // No stock - just delete the product
+                      setProductToDelete(managingProduct.id);
+                      setDeleteProductConfirmOpen(true);
                     }
                   }
                 }
@@ -1709,8 +1750,8 @@ export function StockManagement({
                   <Trash2 className="h-5 w-5 text-red-600" />
                 </div>
                 <div className="text-left">
-                  <p className="font-semibold text-red-600">Delete Stock</p>
-                  <p className="text-xs text-muted-foreground">Return to supplier, expired, lost</p>
+                  <p className="font-semibold text-red-600">Delete Product</p>
+                  <p className="text-xs text-muted-foreground">Remove product completely</p>
                 </div>
               </div>
             </Button>
