@@ -1,144 +1,30 @@
-import { useState } from "react";
-import { Plus, Trash2, DollarSign, Edit, Eye, EyeOff } from "lucide-react";
+import { DollarSign } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Product, Expense, UnitType } from "../types/business";
-import { Textarea } from "./ui/textarea";
+import { Expense } from "../types/business";
 import { useLanguage } from "../contexts/LanguageContext";
 
 interface ExpenseManagementProps {
-  products: Product[];
   expenses: Expense[];
-  onAddExpense: (expense: Omit<Expense, "id">) => void;
-  onDeleteExpense: (id: string) => void;
-  onAddProduct: (product: Omit<Product, "id">) => void;
-  onUpdateProduct?: (id: string, product: Omit<Product, "id">) => void;
-  onDeleteProduct?: (id: string) => void;
 }
 
-const BLANK_PRODUCT = {
-  name: "",
-  category: "",
-  price: 0,
-  cost: 0,
-  unit: "unit" as UnitType,
-  stock: 0,
-  imageUrl: "",
-  showInOrders: true,
-};
-
 export function ExpenseManagement({
-  products,
   expenses,
-  onAddExpense,
-  onDeleteExpense,
-  onAddProduct,
-  onUpdateProduct,
-  onDeleteProduct,
 }: ExpenseManagementProps) {
   const { t } = useLanguage();
-  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
-  const [productDialogOpen, setProductDialogOpen] = useState(false);
-  const [editProductDialogOpen, setEditProductDialogOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [productToDelete, setProductToDelete] = useState<string>("");
-  const [selectedProductId, setSelectedProductId] = useState("");
-  const [editingProductId, setEditingProductId] = useState("");
-  const [quantity, setQuantity] = useState(0);
-  const [costPerUnit, setCostPerUnit] = useState(0);
-  const [unit, setUnit] = useState<UnitType>("unit");
-  const [notes, setNotes] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
-
-  const [newProduct, setNewProduct] = useState({ ...BLANK_PRODUCT });
-  const [editProduct, setEditProduct] = useState({ ...BLANK_PRODUCT });
-  const [newProductError, setNewProductError] = useState("");
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleAddExpense = () => {
-    const product = products.find(p => p.id === selectedProductId);
-    if (!product) return;
-    onAddExpense({
-      productId: product.id,
-      productName: product.name,
-      quantity,
-      unit,
-      costPerUnit,
-      totalCost: quantity * costPerUnit,
-      date: new Date(),
-      expiryDate: expiryDate || undefined,
-      notes,
-    });
-    setExpenseDialogOpen(false);
-    resetExpenseForm();
-  };
-
-  const resetExpenseForm = () => {
-    setSelectedProductId(""); setQuantity(0); setCostPerUnit(0); setUnit("unit"); setNotes(""); setExpiryDate("");
-  };
-
-  const handleAddProduct = () => {
-    if (!newProduct.name || !newProduct.category) return;
-    const isDuplicate = products.some(
-      p => p.name.trim().toLowerCase() === newProduct.name.trim().toLowerCase()
-    );
-    if (isDuplicate) {
-      setNewProductError(`"${newProduct.name}" already exists. Please use a different name.`);
-      return;
-    }
-    onAddProduct(newProduct);
-    setProductDialogOpen(false);
-    setNewProduct({ ...BLANK_PRODUCT });
-    setNewProductError("");
-  };
-
-  const handleEditProduct = () => {
-    if (!editProduct.name || !editProduct.category || !onUpdateProduct) return;
-    onUpdateProduct(editingProductId, editProduct);
-    setEditProductDialogOpen(false);
-    setEditProduct({ ...BLANK_PRODUCT });
-  };
-
-  // Quick toggle showInOrders without opening dialog
-  const handleToggleVisibility = (product: Product) => {
-    if (!onUpdateProduct) return;
-    const current = product.showInOrders !== false; // default true
-    onUpdateProduct(product.id, { ...product, showInOrders: !current });
-  };
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { alert("Please select an image file"); return; }
-    if (file.size > 5 * 1024 * 1024) { alert("Image size should be less than 5MB"); return; }
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const b64 = reader.result as string;
-      if (isEdit) setEditProduct(p => ({ ...p, imageUrl: b64 }));
-      else setNewProduct(p => ({ ...p, imageUrl: b64 }));
-    };
-    reader.readAsDataURL(file);
-  };
-
   const getTotalExpenses = () => expenses.reduce((s, e) => s + e.totalCost, 0);
-  const getRecentExpenses = () =>
-    [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Summary */}
+      {/* Summary - Total Expenses Only */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>{t.expenses.title}</CardTitle>
-              <CardDescription>{t.expenses.description}</CardDescription>
+              <CardDescription>Track your business expenses from stock top-ups</CardDescription>
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground">{t.expenses.totalExpenses}</p>
@@ -146,172 +32,24 @@ export function ExpenseManagement({
             </div>
           </div>
         </CardHeader>
-      </Card>
-
-      {/* Product Grid */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t.expenses.productManagement}</CardTitle>
-          <CardDescription>
-            {t.expenses.productManagementDesc}
-          </CardDescription>
-        </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {products.map(product => {
-              const visible = product.showInOrders !== false;
-              return (
-                <Card
-                  key={product.id}
-                  className={`relative group transition-colors ${visible ? "hover:border-primary" : "opacity-60 border-dashed hover:border-muted-foreground"}`}
-                >
-                  <CardContent className="p-4">
-                    {/* Action buttons top-right */}
-                    <div className="absolute top-1 right-1 flex gap-1 z-10">
-                      {/* Visibility toggle */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title={visible ? t.expenses.hideFromOrders : t.expenses.showInOrdersBtn}
-                        className={`h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity ${visible ? "text-green-600 hover:text-red-500" : "text-muted-foreground hover:text-green-600"}`}
-                        onClick={(e) => { e.stopPropagation(); handleToggleVisibility(product); }}
-                      >
-                        {visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                      </Button>
-                      {/* Edit button */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingProductId(product.id);
-                          setEditProduct({
-                            name: product.name,
-                            category: product.category,
-                            price: product.price,
-                            cost: product.cost,
-                            unit: product.unit,
-                            stock: product.stock,
-                            imageUrl: product.imageUrl || "",
-                            showInOrders: product.showInOrders !== false,
-                          });
-                          setEditProductDialogOpen(true);
-                        }}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      {onDeleteProduct && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setProductToDelete(product.id);
-                            setDeleteConfirmOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Card body — click to add expense */}
-                    <div
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setSelectedProductId(product.id);
-                        setUnit(product.unit);
-                        setExpenseDialogOpen(true);
-                      }}
-                    >
-                      <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center overflow-hidden relative">
-                        {product.imageUrl ? (
-                          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <DollarSign className="h-6 w-6 text-muted-foreground" />
-                        )}
-                        {!visible && (
-                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-lg">
-                            <EyeOff className="h-5 w-5 text-white" />
-                          </div>
-                        )}
-                      </div>
-                      <h4 className="font-medium text-sm truncate">{product.name}</h4>
-                      <p className="text-xs text-muted-foreground">{product.category}</p>
-                      <p className={`text-xs mt-1 font-semibold ${visible ? "text-green-600" : "text-muted-foreground"}`}>
-                        {visible ? t.expenses.inOrders : t.expenses.hidden}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-
-            {/* Add New Product */}
-            <Card
-              className="cursor-pointer hover:border-primary transition-colors border-dashed"
-              onClick={() => setProductDialogOpen(true)}
-            >
-              <CardContent className="p-4">
-                <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center">
-                  <Plus className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h4 className="font-medium text-sm text-center">{t.expenses.addProduct}</h4>
-              </CardContent>
-            </Card>
+          <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+            <DollarSign className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-600" />
+            <div>
+              <strong>Expenses are now managed in Stock Management</strong>
+              <p className="text-xs mt-1 text-blue-700">
+                All stock top-ups automatically create expense records. Product management has been moved to the Stock tab for a unified inventory experience.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Recent Expenses Table */}
-      <Card>
-        <CardHeader><CardTitle>{t.expenses.recentExpenses}</CardTitle></CardHeader>
-        <CardContent>
-          {expenses.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">{t.expenses.noExpenses}</p>
-            </div>
-          ) : (
-            <div className="border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t.common.date}</TableHead>
-                    <TableHead>{t.expenses.product}</TableHead>
-                    <TableHead>{t.common.quantity}</TableHead>
-                    <TableHead>{t.expenses.costPerUnitCol}</TableHead>
-                    <TableHead>{t.expenses.totalCost}</TableHead>
-                    <TableHead>{t.common.notes}</TableHead>
-                    <TableHead className="text-right">{t.common.actions}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {getRecentExpenses().map(expense => (
-                    <TableRow key={expense.id}>
-                      <TableCell className="text-sm">{new Date(expense.date).toLocaleDateString()}</TableCell>
-                      <TableCell>{expense.productName}</TableCell>
-                      <TableCell>{expense.quantity} {expense.unit}</TableCell>
-                      <TableCell>RM {expense.costPerUnit.toFixed(2)}</TableCell>
-                      <TableCell className="font-medium">RM {expense.totalCost.toFixed(2)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{expense.notes || "—"}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => onDeleteExpense(expense.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Note: Product Grid and Recent Expenses sections removed - now in Stock Management */}
 
-      {/* ── Add Expense Dialog ─────────────────────────────────────────────── */}
+    </div>
+  );
+}
       <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
         <DialogContent>
           <DialogHeader>
