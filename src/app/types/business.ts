@@ -1,5 +1,22 @@
 export type UnitType = "unit" | "kg" | "gram" | "liter" | "ml" | "piece";
 
+export type DeleteReason = "return_to_supplier" | "expired" | "spoiled" | "lost" | "damaged" | "other";
+
+export interface DeleteRecord {
+  id: string;
+  stockItemId: string;
+  productName: string;
+  quantity: number;
+  unit: UnitType;
+  costPerUnit: number;
+  totalValue: number;
+  reason: DeleteReason;
+  financialImpact: "refund" | "loss";
+  impactAmount: number;
+  date: Date;
+  notes?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
