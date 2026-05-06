@@ -23,7 +23,7 @@ import {
 } from "./ui/dropdown-menu";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
-import { StockItem, StockAdjustment, UnitType, Expense, DeleteRecord, DeleteReason } from "../types/business";
+import { StockItem, StockAdjustment, UnitType, Expense, DeleteRecord, DeleteReason, Product } from "../types/business";
 import { useLanguage } from "../contexts/LanguageContext";
 
 const UNITS: UnitType[] = ["unit", "kg", "gram", "liter", "ml", "piece"];
@@ -87,10 +87,14 @@ interface StockManagementProps {
   stockAdjustments: StockAdjustment[];
   expenses: Expense[];
   deleteRecords: DeleteRecord[];
+  products: Product[];
   onAddStock: (item: Omit<StockItem, "id" | "addedDate">, qty: number) => void;
   onReduceStock: (itemId: string, qty: number, reason: string, notes: string, costPerUnit?: number) => void;
   onDeleteStock: (itemId: string, reason: DeleteReason, notes: string) => void;
   onUpdateStock: (itemId: string, updates: Partial<StockItem>) => void;
+  onAddProduct: (product: Omit<Product, "id">) => void;
+  onUpdateProduct: (id: string, product: Omit<Product, "id">) => void;
+  onDeleteProduct: (id: string) => void;
 }
 interface AddStockForm {
   productName: string; category: string; quantity: string; unit: UnitType;
@@ -101,7 +105,9 @@ interface ReduceForm { quantity: string; reason: string; notes: string; }
 type ActiveTab = "inventory" | "topup_history" | "delete_history" | "report";
 
 export function StockManagement({
-  stockItems, stockAdjustments, expenses, deleteRecords, onAddStock, onReduceStock, onDeleteStock, onUpdateStock,
+  stockItems, stockAdjustments, expenses, deleteRecords, products, 
+  onAddStock, onReduceStock, onDeleteStock, onUpdateStock,
+  onAddProduct, onUpdateProduct, onDeleteProduct,
 }: StockManagementProps) {
   const { t } = useLanguage();
   const s = t.stock;
@@ -180,6 +186,28 @@ export function StockManagement({
 
   // -- Image upload -----------------------------------------------------------
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  // -- Product management -----------------------------------------------------
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [editProductDialogOpen, setEditProductDialogOpen] = useState(false);
+  const [deleteProductConfirmOpen, setDeleteProductConfirmOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<string>("");
+  const [editingProductId, setEditingProductId] = useState("");
+  
+  const BLANK_PRODUCT = {
+    name: "",
+    category: "",
+    price: 0,
+    cost: 0,
+    unit: "unit" as UnitType,
+    stock: 0,
+    imageUrl: "",
+    showInOrders: true,
+  };
+  
+  const [newProduct, setNewProduct] = useState({ ...BLANK_PRODUCT });
+  const [editProduct, setEditProduct] = useState({ ...BLANK_PRODUCT });
+  const [newProductError, setNewProductError] = useState("");
 
   // -- Derived data -----------------------------------------------------------
   const costMap = useMemo(() => {
@@ -344,10 +372,52 @@ export function StockManagement({
 
   const handleBulkDelete = () => {
     selectedItems.forEach(itemId => {
-      onDeleteStock(itemId);
+      onDeleteStock(itemId, "other", "Bulk delete");
     });
     setSelectedItems(new Set());
     setBulkDeleteConfirmOpen(false);
+  };
+
+  // -- Product Management Handlers --------------------------------------------
+  const handleAddProduct = () => {
+    if (!newProduct.name || !newProduct.category) return;
+    const isDuplicate = products.some(
+      p => p.name.trim().toLowerCase() === newProduct.name.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+      setNewProductError(`"${newProduct.name}" already exists. Please use a different name.`);
+      return;
+    }
+    onAddProduct(newProduct);
+    setProductDialogOpen(false);
+    setNewProduct({ ...BLANK_PRODUCT });
+    setNewProductError("");
+  };
+
+  const handleEditProduct = () => {
+    if (!editProduct.name || !editProduct.category) return;
+    onUpdateProduct(editingProductId, editProduct);
+    setEditProductDialogOpen(false);
+    setEditProduct({ ...BLANK_PRODUCT });
+  };
+
+  const handleToggleVisibility = (product: Product) => {
+    const current = product.showInOrders !== false;
+    onUpdateProduct(product.id, { ...product, showInOrders: !current });
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { alert("Please select an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { alert("Image size should be less than 5MB"); return; }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const b64 = reader.result as string;
+      if (isEdit) setEditProduct(p => ({ ...p, imageUrl: b64 }));
+      else setNewProduct(p => ({ ...p, imageUrl: b64 }));
+    };
+    reader.readAsDataURL(file);
   };
 
   // -- Render -----------------------------------------------------------------
@@ -480,42 +550,51 @@ export function StockManagement({
               </SelectContent>
             </Select>
             
-            {/* Bulk action buttons */}
-            {selectedItems.size > 0 && (
-              <div className="flex items-center gap-2 ml-auto">
-                <span className="text-sm text-muted-foreground">
-                  {selectedItems.size} selected
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={deselectAll}
-                >
-                  Clear
+            {/* Global Actions Menu (3-dot) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-10 w-10 p-0">
+                  <MoreVertical className="h-4 w-4" />
                 </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  onClick={() => setAddOpen(true)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="h-4 w-4 text-green-600" />
+                  <span>Add New Product</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={selectAll}
+                  disabled={filtered.length === 0}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <CheckSquare className="h-4 w-4" />
+                  <span>Select All</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={deselectAll}
+                  disabled={selectedItems.size === 0}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Square className="h-4 w-4" />
+                  <span>Clear Selection</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
                   onClick={() => setBulkDeleteConfirmOpen(true)}
-                  className="flex items-center gap-1"
+                  disabled={selectedItems.size === 0}
+                  className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-600"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Delete Selected
-                </Button>
-              </div>
-            )}
+                  <span>Delete Selected ({selectedItems.size})</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             
-            {/* Select all button when no items selected */}
-            {selectedItems.size === 0 && filtered.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={selectAll}
-                className="ml-auto"
-              >
-                Select All
-              </Button>
-            )}
+            {/* Bulk action buttons (shown when items selected) - REMOVED, now in dropdown */}
           </div>
 
           {/* Stock Card Grid */}
@@ -570,19 +649,19 @@ export function StockManagement({
                       </div>
 
                       {/* Actions dropdown menu – top right */}
-                      <div className="absolute top-2 right-2 z-10">
+                      <div className="absolute top-2 right-2 z-20">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 hover:bg-background"
+                              className="h-8 w-8 p-0 bg-background/95 hover:bg-background shadow-sm border border-border/50"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuContent align="end" className="w-48 z-50">
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -716,6 +795,130 @@ export function StockManagement({
               </Card>
             </div>
           )}
+
+          {/* ========== PRODUCT MANAGEMENT SECTION ========== */}
+          <div className="mt-8 pt-8 border-t">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold">Product Catalog</h3>
+                <p className="text-sm text-muted-foreground">Manage products available for orders</p>
+              </div>
+              <Button onClick={() => setProductDialogOpen(true)} className="flex items-center gap-2">
+                <Plus className="h-4 w-4" />Add Product
+              </Button>
+            </div>
+
+            {/* Product Grid */}
+            {products.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
+                <Package2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">No products yet</p>
+                <p className="text-sm mt-1">Add products to make them available in orders</p>
+                <Button className="mt-4" onClick={() => setProductDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />Add Your First Product
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {products.map(product => {
+                  const visible = product.showInOrders !== false;
+                  return (
+                    <Card
+                      key={product.id}
+                      className={`relative group transition-colors ${visible ? "hover:border-primary" : "opacity-60 border-dashed hover:border-muted-foreground"}`}
+                    >
+                      <CardContent className="p-4">
+                        {/* Action buttons top-right */}
+                        <div className="absolute top-1 right-1 flex gap-1 z-10">
+                          {/* Visibility toggle */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title={visible ? "Hide from Orders" : "Show in Orders"}
+                            className={`h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity ${visible ? "text-green-600 hover:text-red-500" : "text-muted-foreground hover:text-green-600"}`}
+                            onClick={(e) => { e.stopPropagation(); handleToggleVisibility(product); }}
+                          >
+                            {visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                          </Button>
+                          {/* Edit button */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingProductId(product.id);
+                              setEditProduct({
+                                name: product.name,
+                                category: product.category,
+                                price: product.price,
+                                cost: product.cost,
+                                unit: product.unit,
+                                stock: product.stock,
+                                imageUrl: product.imageUrl || "",
+                                showInOrders: product.showInOrders !== false,
+                              });
+                              setEditProductDialogOpen(true);
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          {/* Delete button */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProductToDelete(product.id);
+                              setDeleteProductConfirmOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+
+                        {/* Card body */}
+                        <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center overflow-hidden relative">
+                          {product.imageUrl ? (
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package2 className="h-6 w-6 text-muted-foreground" />
+                          )}
+                          {!visible && (
+                            <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-lg">
+                              <EyeOff className="h-5 w-5 text-white" />
+                            </div>
+                          )}
+                        </div>
+                        <h4 className="font-medium text-sm truncate">{product.name}</h4>
+                        <p className="text-xs text-muted-foreground">{product.category}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-xs font-semibold text-primary">RM {product.price.toFixed(2)}</span>
+                          <span className={`text-xs font-semibold ${visible ? "text-green-600" : "text-muted-foreground"}`}>
+                            {visible ? "In Orders" : "Hidden"}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+
+                {/* Add New Product Card */}
+                <Card
+                  className="cursor-pointer hover:border-primary transition-colors border-dashed"
+                  onClick={() => setProductDialogOpen(true)}
+                >
+                  <CardContent className="p-4">
+                    <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center">
+                      <Plus className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <h4 className="font-medium text-sm text-center">Add Product</h4>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
         </div>
       )}
       {/* -- TOP-UP HISTORY TAB ---------------------------------------------------- */}
@@ -1373,6 +1576,234 @@ export function StockManagement({
               onClick={handleBulkDelete}
             >
               <Trash2 className="h-4 w-4 mr-2" />Delete {selectedItems.size} Item{selectedItems.size !== 1 ? 's' : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========== PRODUCT MANAGEMENT DIALOGS ========== */}
+      
+      {/* Add Product Dialog */}
+      <Dialog open={productDialogOpen} onOpenChange={(v) => { setProductDialogOpen(v); if (!v) { setNewProductError(""); setNewProduct({ ...BLANK_PRODUCT }); } }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Product</DialogTitle>
+            <DialogDescription>Add a product to your catalog for orders</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Product Name *</Label>
+              <Input value={newProduct.name}
+                onChange={e => { setNewProduct(p => ({ ...p, name: e.target.value })); setNewProductError(""); }}
+                placeholder="e.g., Boba Milk Tea"
+                className={newProductError ? "border-red-400 focus:ring-red-200" : ""} />
+              {newProductError && (
+                <p className="text-xs text-red-500">{newProductError}</p>
+              )}
+            </div>
+            <div className="grid gap-2">
+              <Label>Category *</Label>
+              <Input value={newProduct.category}
+                onChange={e => setNewProduct(p => ({ ...p, category: e.target.value }))}
+                placeholder="e.g., Beverages" />
+            </div>
+            {/* Show in Orders toggle */}
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+              <div>
+                <p className="text-sm font-medium">Show in Orders</p>
+                <p className="text-xs text-muted-foreground">Make this product available for ordering</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNewProduct(p => ({ ...p, showInOrders: !p.showInOrders }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${newProduct.showInOrders ? "bg-primary" : "bg-muted-foreground/30"}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${newProduct.showInOrders ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+            <div className="grid gap-2">
+              <Label>Product Image</Label>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" className="flex-1"
+                    onClick={() => document.getElementById("new-product-image-upload")?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />Upload Image
+                  </Button>
+                  <input id="new-product-image-upload" type="file" accept="image/*" className="hidden"
+                    onChange={e => handleImageUpload(e, false)} />
+                </div>
+                <div className="text-xs text-muted-foreground text-center">or</div>
+                <Input
+                  value={newProduct.imageUrl.startsWith("data:") ? "" : newProduct.imageUrl}
+                  onChange={e => setNewProduct(p => ({ ...p, imageUrl: e.target.value }))}
+                  placeholder="Paste image URL" />
+              </div>
+              {newProduct.imageUrl && (
+                <div className="mt-2 relative">
+                  <div className="aspect-square w-32 bg-muted rounded-lg overflow-hidden mx-auto">
+                    <img src={newProduct.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" className="absolute top-0 right-0"
+                    onClick={() => setNewProduct(p => ({ ...p, imageUrl: "" }))}>Remove</Button>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Selling Price (RM)</Label>
+                <Input type="number" min="0" step="0.01" value={newProduct.price}
+                  onChange={e => setNewProduct(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Cost Per Unit (RM)</Label>
+                <Input type="number" min="0" step="0.01" value={newProduct.cost}
+                  onChange={e => setNewProduct(p => ({ ...p, cost: parseFloat(e.target.value) || 0 }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Unit Type</Label>
+                <Select value={newProduct.unit} onValueChange={v => setNewProduct(p => ({ ...p, unit: v as UnitType }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unit">Unit</SelectItem>
+                    <SelectItem value="kg">Kilogram (kg)</SelectItem>
+                    <SelectItem value="gram">Gram (g)</SelectItem>
+                    <SelectItem value="liter">Liter (L)</SelectItem>
+                    <SelectItem value="ml">Milliliter (ml)</SelectItem>
+                    <SelectItem value="piece">Piece</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Initial Stock</Label>
+                <Input type="number" min="0" value={newProduct.stock}
+                  onChange={e => setNewProduct(p => ({ ...p, stock: parseFloat(e.target.value) || 0 }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProductDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddProduct}>Add Product</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={editProductDialogOpen} onOpenChange={setEditProductDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+            <DialogDescription>Update product information</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Product Name *</Label>
+              <Input value={editProduct.name}
+                onChange={e => setEditProduct(p => ({ ...p, name: e.target.value }))}
+                placeholder="e.g., Boba Milk Tea" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Category *</Label>
+              <Input value={editProduct.category}
+                onChange={e => setEditProduct(p => ({ ...p, category: e.target.value }))}
+                placeholder="e.g., Beverages" />
+            </div>
+            {/* Show in Orders toggle */}
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+              <div>
+                <p className="text-sm font-medium">Show in Orders</p>
+                <p className="text-xs text-muted-foreground">Make this product available for ordering</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditProduct(p => ({ ...p, showInOrders: !p.showInOrders }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${editProduct.showInOrders ? "bg-primary" : "bg-muted-foreground/30"}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${editProduct.showInOrders ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+            <div className="grid gap-2">
+              <Label>Product Image</Label>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" className="flex-1"
+                    onClick={() => document.getElementById("edit-product-image-upload")?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />Upload Image
+                  </Button>
+                  <input id="edit-product-image-upload" type="file" accept="image/*" className="hidden"
+                    onChange={e => handleImageUpload(e, true)} />
+                </div>
+              </div>
+              {editProduct.imageUrl && (
+                <div className="mt-2 relative">
+                  <div className="aspect-square w-32 bg-muted rounded-lg overflow-hidden mx-auto">
+                    <img src={editProduct.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" className="absolute top-0 right-0"
+                    onClick={() => setEditProduct(p => ({ ...p, imageUrl: "" }))}>Remove</Button>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Selling Price (RM)</Label>
+                <Input type="number" min="0" step="0.01" value={editProduct.price}
+                  onChange={e => setEditProduct(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Cost Per Unit (RM)</Label>
+                <Input type="number" min="0" step="0.01" value={editProduct.cost}
+                  onChange={e => setEditProduct(p => ({ ...p, cost: parseFloat(e.target.value) || 0 }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Unit Type</Label>
+                <Select value={editProduct.unit} onValueChange={v => setEditProduct(p => ({ ...p, unit: v as UnitType }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unit">Unit</SelectItem>
+                    <SelectItem value="kg">Kilogram (kg)</SelectItem>
+                    <SelectItem value="gram">Gram (g)</SelectItem>
+                    <SelectItem value="liter">Liter (L)</SelectItem>
+                    <SelectItem value="ml">Milliliter (ml)</SelectItem>
+                    <SelectItem value="piece">Piece</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Initial Stock</Label>
+                <Input type="number" min="0" value={editProduct.stock}
+                  onChange={e => setEditProduct(p => ({ ...p, stock: parseFloat(e.target.value) || 0 }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditProductDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleEditProduct}>Update Product</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Product Confirmation Dialog */}
+      <Dialog open={deleteProductConfirmOpen} onOpenChange={setDeleteProductConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Product</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this product? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteProductConfirmOpen(false); setProductToDelete(""); }}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => {
+              if (productToDelete) { onDeleteProduct(productToDelete); }
+              setDeleteProductConfirmOpen(false); setProductToDelete("");
+            }}>
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
