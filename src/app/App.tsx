@@ -36,6 +36,8 @@ import {
   Expense,
   StockItem,
   StockAdjustment,
+  DeleteRecord,
+  DeleteReason,
 } from "./types/business";
 import { Toaster } from "./components/ui/sonner";
 import {
@@ -280,6 +282,7 @@ function AppContent() {
   const [stockAdjustments, setStockAdjustments] = useState<
     StockAdjustment[]
   >([]);
+  const [deleteRecords, setDeleteRecords] = useState<DeleteRecord[]>([]);
   const [activeTab, setActiveTab] = useState("orders");
   const [syncStatus, setSyncStatus] =
     useState<SyncStatus>("idle");
@@ -379,6 +382,7 @@ function AppContent() {
           expenses: se,
           stockItems: ss,
           stockAdjustments: sa,
+          deleteRecords: dr,
         } = await dataRes.json();
         setProducts(sp || sampleProducts);
         setOrders(
@@ -409,6 +413,12 @@ function AppContent() {
             date: new Date(a.date),
           })),
         );
+        setDeleteRecords(
+          (dr || []).map((d: DeleteRecord) => ({
+            ...d,
+            date: new Date(d.date),
+          })),
+        );
       } else {
         const errText = await dataRes.text();
         throw new Error(`Server returned ${dataRes.status}: ${errText}`);
@@ -430,6 +440,7 @@ function AppContent() {
             profile: lprof,
             stockItems: ls,
             stockAdjustments: la,
+            deleteRecords: ld,
           } = JSON.parse(local);
           if (lp) setProducts(lp);
           if (lo)
@@ -458,6 +469,13 @@ function AppContent() {
               la.map((a: StockAdjustment) => ({
                 ...a,
                 date: new Date(a.date),
+              })),
+            );
+          if (ld)
+            setDeleteRecords(
+              ld.map((d: DeleteRecord) => ({
+                ...d,
+                date: new Date(d.date),
               })),
             );
           if (lprof) setUserProfile(lprof);
@@ -491,6 +509,7 @@ function AppContent() {
             expenses,
             stockItems,
             stockAdjustments,
+            deleteRecords,
           }),
         });
         if (res.ok) {
@@ -503,6 +522,7 @@ function AppContent() {
               expenses,
               stockItems,
               stockAdjustments,
+              deleteRecords,
               profile: userProfile,
             }),
           );
@@ -523,6 +543,7 @@ function AppContent() {
     userProfile,
     stockItems,
     stockAdjustments,
+    deleteRecords,
   ]);
 
   useEffect(() => {
@@ -847,14 +868,46 @@ function AppContent() {
     );
   };
 
-  const handleDeleteStock = (itemId: string) => {
-    // Find the stock item before deleting so we can clean up linked expenses
+  const handleDeleteStock = (itemId: string, reason: DeleteReason, notes: string) => {
+    // Find the stock item before deleting so we can calculate financial impact
     const stockItem = stockItems.find((s) => s.id === itemId);
-    setStockItems((prev) => prev.filter((s) => s.id !== itemId));
-    setStockAdjustments((prev) => prev.filter((a) => a.stockItemId !== itemId));
-
-    // Remove expenses that were auto-created from this stock item
+    
     if (stockItem) {
+      // Calculate cost per unit from expenses or use stored cost
+      const matching = expenses.filter(
+        e =>
+          e.productName.toLowerCase() === stockItem.productName.toLowerCase() &&
+          e.notes !== "Initial stock entry from new product" &&
+          !e.notes?.startsWith("Initial stock entry")
+      );
+      const totalQty = matching.reduce((sum, e) => sum + e.quantity, 0);
+      const totalSpent = matching.reduce((sum, e) => sum + e.totalCost, 0);
+      const avgCostFromExpenses = totalQty > 0 ? totalSpent / totalQty : 0;
+      const costPerUnit = (stockItem.costPerUnit ?? 0) > 0 ? stockItem.costPerUnit! : avgCostFromExpenses;
+      
+      const totalValue = stockItem.quantity * costPerUnit;
+      const financialImpact = reason === "return_to_supplier" ? "refund" : "loss";
+      const impactAmount = totalValue;
+      
+      // Create delete record
+      const deleteRecord: DeleteRecord = {
+        id: Date.now().toString() + "_del",
+        stockItemId: itemId,
+        productName: stockItem.productName,
+        quantity: stockItem.quantity,
+        unit: stockItem.unit,
+        costPerUnit,
+        totalValue,
+        reason,
+        financialImpact,
+        impactAmount,
+        date: new Date(),
+        notes: notes || undefined,
+      };
+      
+      setDeleteRecords((prev) => [deleteRecord, ...prev]);
+      
+      // Remove expenses that were auto-created from this stock item
       setExpenses((prev) =>
         prev.filter(
           (e) =>
@@ -866,6 +919,18 @@ function AppContent() {
         ),
       );
     }
+    
+    // Remove stock item and adjustments
+    setStockItems((prev) => prev.filter((s) => s.id !== itemId));
+    setStockAdjustments((prev) => prev.filter((a) => a.stockItemId !== itemId));
+  };
+
+  const handleUpdateStock = (itemId: string, updates: Partial<StockItem>) => {
+    setStockItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId ? { ...item, ...updates } : item
+      )
+    );
   };
 
   const handleUpdateUser = async (userData: UserProfile) => {
@@ -894,6 +959,7 @@ function AppContent() {
               expenses,
               stockItems,
               stockAdjustments,
+              deleteRecords,
               user: userProfile,
               exportDate: new Date().toISOString(),
             },
@@ -940,6 +1006,13 @@ function AppContent() {
         data.stockAdjustments.map((a: StockAdjustment) => ({
           ...a,
           date: new Date(a.date),
+        })),
+      );
+    if (data.deleteRecords)
+      setDeleteRecords(
+        data.deleteRecords.map((d: DeleteRecord) => ({
+          ...d,
+          date: new Date(d.date),
         })),
       );
     if (data.user) setUserProfile(data.user);
@@ -1170,9 +1243,11 @@ function AppContent() {
               stockItems={stockItems}
               stockAdjustments={stockAdjustments}
               expenses={expenses}
+              deleteRecords={deleteRecords}
               onAddStock={handleAddStock}
               onReduceStock={handleReduceStock}
               onDeleteStock={handleDeleteStock}
+              onUpdateStock={handleUpdateStock}
             />
           </TabsContent>
           <TabsContent value="settings" className="mt-0">
