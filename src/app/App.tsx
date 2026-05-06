@@ -7,7 +7,6 @@ import {
 import { supabase, SERVER, publicAnonKey } from "../lib/supabase";
 import {
   ShoppingCart,
-  DollarSign,
   TrendingUp,
   Settings,
   LogOut,
@@ -25,7 +24,6 @@ import {
   TabsTrigger,
 } from "./components/ui/tabs";
 import { OrderSummary } from "./components/OrderSummary";
-import { ExpenseManagement } from "./components/ExpenseManagement";
 import { ProfitAnalytics } from "./components/ProfitAnalytics";
 import { UserSettings } from "./components/UserSettings";
 import { StockManagement } from "./components/StockManagement";
@@ -1165,7 +1163,7 @@ function AppContent() {
       {/* Main */}
       <main className="container mx-auto px-4 py-6 flex-1">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full max-w-2xl grid-cols-5 mb-8">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-8">
             <TabsTrigger
               value="orders"
               className="flex items-center gap-2"
@@ -1173,15 +1171,6 @@ function AppContent() {
               <ShoppingCart className="h-4 w-4" />
               <span className="hidden sm:inline">
                 {t.nav.orders}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="expenses"
-              className="flex items-center gap-2"
-            >
-              <DollarSign className="h-4 w-4" />
-              <span className="hidden sm:inline">
-                {t.nav.expenses}
               </span>
             </TabsTrigger>
             <TabsTrigger
@@ -1216,11 +1205,6 @@ function AppContent() {
               products={products}
               onPlaceOrder={handlePlaceOrder}
               businessProfile={userProfile}
-            />
-          </TabsContent>
-          <TabsContent value="expenses" className="mt-0">
-            <ExpenseManagement
-              expenses={expenses}
             />
           </TabsContent>
           <TabsContent value="analytics" className="mt-0">
