@@ -3,7 +3,7 @@ import {
   Package2, Plus, Minus, Trash2, AlertTriangle, CheckCircle2,
   Clock, XCircle, ChevronDown, ChevronUp, Search, History,
   RefreshCw, ArrowDownCircle, ArrowUpCircle, Link2, TrendingDown,
-  BarChart3, Square, CheckSquare, Edit, MoreVertical, Upload, Eye, EyeOff,
+  BarChart3, Square, CheckSquare, Edit, MoreVertical, Upload, Eye, EyeOff, Printer,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -749,44 +749,31 @@ export function StockManagement({
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   {selectMode ? <Square className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
-                  <span>{selectMode ? "Exit Select Mode" : "Select Mode"}</span>
+                  <span>{selectMode ? "Exit Select Mode" : "Select"}</span>
                 </DropdownMenuItem>
-                {selectMode && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={selectAll}
-                      disabled={filtered.length === 0}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <CheckSquare className="h-4 w-4" />
-                      <span>Select All</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={deselectAll}
-                      disabled={selectedItems.size === 0}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <Square className="h-4 w-4" />
-                      <span>Clear Selection</span>
-                    </DropdownMenuItem>
-                  </>
-                )}
+                <DropdownMenuItem
+                  onClick={selectAll}
+                  disabled={filtered.length === 0}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <CheckSquare className="h-4 w-4" />
+                  <span>Select All</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (selectedItems.size > 0) {
+                      setBulkDeleteConfirmOpen(true);
+                    }
+                  }}
+                  disabled={selectedItems.size === 0}
+                  className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete {selectedItems.size > 0 ? `(${selectedItems.size})` : ''}</span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            
-            {/* Delete button (shown in select mode) */}
-            {selectMode && selectedItems.size > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setBulkDeleteConfirmOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete ({selectedItems.size})
-              </Button>
-            )}
           </div>
 
           {/* Stock Card Grid */}
@@ -1120,12 +1107,25 @@ export function StockManagement({
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BarChart3 className="h-4 w-4 text-primary" />Summary Report
-              </CardTitle>
-              <CardDescription>
-                Active stock only � deleted items are excluded
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <BarChart3 className="h-4 w-4 text-primary" />Summary Report
+                  </CardTitle>
+                  <CardDescription>
+                    Active stock only � deleted items are excluded
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2"
+                >
+                  <Printer className="h-4 w-4" />
+                  Print
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {/* Summary totals */}
@@ -1576,23 +1576,23 @@ export function StockManagement({
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
-              <Trash2 className="h-5 w-5" />Delete Multiple Products
+              <AlertTriangle className="h-5 w-5" />Delete Multiple Products
             </DialogTitle>
             <DialogDescription>
-              You are about to delete <strong>{selectedItems.size} product{selectedItems.size !== 1 ? 's' : ''}</strong>.
+              Are you sure you want to delete <strong>{selectedItems.size} product{selectedItems.size !== 1 ? 's' : ''}</strong>?
               <span className="block mt-2 text-xs text-amber-600">
-                ⚠️ This will also remove all top-up history for these items. This action cannot be undone.
+                ⚠️ This action cannot be undone. Products with stock will have their financial impact tracked.
               </span>
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[200px] overflow-y-auto border rounded-lg p-3 bg-muted/30">
             <ul className="space-y-1 text-sm">
               {Array.from(selectedItems).map(itemId => {
-                const item = stockItems.find(s => s.id === itemId);
+                const item = mergedInventory.find(i => i.id === itemId);
                 return item ? (
                   <li key={itemId} className="flex items-center gap-2">
                     <Package2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="font-medium">{item.productName}</span>
+                    <span className="font-medium">{item.name}</span>
                     <span className="text-xs text-muted-foreground">({item.quantity} {item.unit})</span>
                   </li>
                 ) : null;
@@ -1601,10 +1601,10 @@ export function StockManagement({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBulkDeleteConfirmOpen(false)}>
-              {t.common.cancel}
+              Cancel
             </Button>
             <Button
-              className="bg-red-600 hover:bg-red-700"
+              variant="destructive"
               onClick={handleBulkDelete}
             >
               <Trash2 className="h-4 w-4 mr-2" />Delete {selectedItems.size} Item{selectedItems.size !== 1 ? 's' : ''}
