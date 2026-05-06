@@ -1220,13 +1220,7 @@ function AppContent() {
           </TabsContent>
           <TabsContent value="expenses" className="mt-0">
             <ExpenseManagement
-              products={products}
               expenses={expenses}
-              onAddExpense={handleAddExpense}
-              onDeleteExpense={handleDeleteExpense}
-              onAddProduct={handleAddProduct}
-              onUpdateProduct={handleUpdateProduct}
-              onDeleteProduct={handleDeleteProduct}
             />
           </TabsContent>
           <TabsContent value="analytics" className="mt-0">
@@ -1244,10 +1238,14 @@ function AppContent() {
               stockAdjustments={stockAdjustments}
               expenses={expenses}
               deleteRecords={deleteRecords}
+              products={products}
               onAddStock={handleAddStock}
               onReduceStock={handleReduceStock}
               onDeleteStock={handleDeleteStock}
               onUpdateStock={handleUpdateStock}
+              onAddProduct={handleAddProduct}
+              onUpdateProduct={handleUpdateProduct}
+              onDeleteProduct={handleDeleteProduct}
             />
           </TabsContent>
           <TabsContent value="settings" className="mt-0">
