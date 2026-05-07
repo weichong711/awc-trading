@@ -732,7 +732,11 @@ export function ProfitAnalytics({
                           <TableCell className="text-right">
                             <Badge
                               variant="secondary"
-                              className="font-mono bg-orange-100 text-orange-700 border-orange-200"
+                              className={`font-mono ${
+                                exp.totalCost < 0 
+                                  ? "bg-green-100 text-green-700 border-green-200" 
+                                  : "bg-orange-100 text-orange-700 border-orange-200"
+                              }`}
                             >
                               RM {exp.totalCost.toFixed(2)}
                             </Badge>
