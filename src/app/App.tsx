@@ -844,8 +844,11 @@ function AppContent() {
         };
         setStockAdjustments((prevAdj) => [adj, ...prevAdj]);
 
+        // ── Calculate cost per unit for expense tracking ────────────────────
+        const itemCost = costPerUnit || item.costPerUnit || 0;
+
         // ── Auto-create expense when topping up with a cost ─────────────────
-        if (isTopUp && costPerUnit && costPerUnit > 0) {
+        if (isTopUp && itemCost > 0) {
           const expenseId = Date.now().toString() + "_topup_exp";
           const newExpense: Expense = {
             id: expenseId,
@@ -853,15 +856,47 @@ function AppContent() {
             productName: item.productName,
             quantity: absQty,
             unit: item.unit,
-            costPerUnit,
-            totalCost: costPerUnit * absQty,
+            costPerUnit: itemCost,
+            totalCost: itemCost * absQty,
             date: new Date(),
             notes: `Stock top-up${notes ? ": " + notes : ""}`,
           };
           setExpenses((prevExp) => [newExpense, ...prevExp]);
         }
 
-        return { ...item, quantity: newQty };
+        // ── Create expense for stock reductions (losses) ────────────────────
+        // Expired, spoiled, lost, damaged, broken = expense (loss)
+        // Return to supplier = negative expense (refund)
+        if (!isTopUp && itemCost > 0 && reason !== "sold" && reason !== "adjustment") {
+          const expenseId = Date.now().toString() + "_loss_exp";
+          const isReturn = reason === "returned"; // "returned" means return to supplier
+          const expenseAmount = itemCost * absQty;
+          
+          const newExpense: Expense = {
+            id: expenseId,
+            productId: itemId,
+            productName: item.productName,
+            quantity: absQty,
+            unit: item.unit,
+            costPerUnit: itemCost,
+            totalCost: isReturn ? -expenseAmount : expenseAmount, // Negative for returns (refund)
+            date: new Date(),
+            notes: isReturn 
+              ? `Return to supplier${notes ? ": " + notes : ""}` 
+              : `Stock loss (${reason})${notes ? ": " + notes : ""}`,
+          };
+          setExpenses((prevExp) => [newExpense, ...prevExp]);
+        }
+
+        // Update stock item with new quantity and optionally update costPerUnit
+        const updatedItem = { ...item, quantity: newQty };
+        
+        // If a new costPerUnit is provided (during top-up), update it
+        if (costPerUnit !== undefined && costPerUnit > 0) {
+          updatedItem.costPerUnit = costPerUnit;
+        }
+        
+        return updatedItem;
       }),
     );
   };
