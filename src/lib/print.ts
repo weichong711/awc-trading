@@ -1,16 +1,33 @@
 /// <reference types="vite/client" />
 import printFrameCss from "../styles/print-frame.css?raw";
 
-export type PrintTarget = "receipt" | "analytics";
+export type PrintTarget = "receipt" | "analytics" | "stock-report";
 
-function buildPrintHtml(title: string, bodyHtml: string) {
+interface PrintConfig {
+  paperWidth?: number; // in mm
+  printerType?: "browser" | "bluetooth";
+  bluetoothDevice?: BluetoothDevice;
+}
+
+function buildPrintHtml(title: string, bodyHtml: string, paperWidth: number = 80) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=80mm, initial-scale=1"/>
+<meta name="viewport" content="width=${paperWidth}mm, initial-scale=1"/>
 <title>${title}</title>
-<style>${printFrameCss}</style>
+<style>
+${printFrameCss}
+@page {
+  size: ${paperWidth}mm auto;
+  margin: 5mm;
+}
+body {
+  width: ${paperWidth}mm;
+  margin: 0 auto;
+  font-family: 'Courier New', monospace;
+}
+</style>
 </head>
 <body>
 <div class="receipt-root">${bodyHtml}</div>
@@ -36,13 +53,58 @@ function printWhenReady(win: Window) {
 }
 
 /**
+ * Print to Bluetooth receipt printer using ESC/POS commands
+ */
+async function printToBluetooth(device: BluetoothDevice, content: string): Promise<void> {
+  try {
+    const server = await device.gatt?.connect();
+    if (!server) throw new Error("Failed to connect to GATT server");
+
+    // Thermal printer service UUID
+    const service = await server.getPrimaryService("000018f0-0000-1000-8000-00805f9b34fb");
+    const characteristic = await service.getCharacteristic("00002af1-0000-1000-8000-00805f9b34fb");
+
+    // Convert content to ESC/POS commands
+    const encoder = new TextEncoder();
+    
+    // Initialize printer
+    const init = new Uint8Array([0x1B, 0x40]); // ESC @
+    await characteristic.writeValue(init);
+
+    // Write content line by line
+    const lines = content.split('\n');
+    for (const line of lines) {
+      const data = encoder.encode(line + '\n');
+      await characteristic.writeValue(data);
+    }
+
+    // Feed paper and cut
+    const feed = new Uint8Array([0x1B, 0x64, 0x03]); // ESC d 3 (feed 3 lines)
+    await characteristic.writeValue(feed);
+
+    const cut = new Uint8Array([0x1D, 0x56, 0x00]); // GS V 0 (full cut)
+    await characteristic.writeValue(cut);
+
+    server.disconnect();
+  } catch (error) {
+    console.error("Bluetooth print error:", error);
+    throw new Error("Failed to print to Bluetooth printer");
+  }
+}
+
+/**
  * Print a DOM node by id using a **minimal document** (no main-app Tailwind):
  * - Prefer `Blob` URL + new tab (mobile Chrome often prints the SPA if we print the main window).
  * - Do **not** use `noopener` on `window.open` — with `noopener`, many browsers return `null`
  *   to the opener, so `document.write` never runs and the user only sees `about:blank`.
  * - Fallback: hidden iframe print.
+ * - Supports custom paper width and Bluetooth printing.
  */
-export function printElementById(id: string, target: PrintTarget) {
+export async function printElementById(
+  id: string, 
+  target: PrintTarget, 
+  config: PrintConfig = {}
+): Promise<void> {
   const el = document.getElementById(id);
   if (!el) return;
 
@@ -51,8 +113,23 @@ export function printElementById(id: string, target: PrintTarget) {
   clone.style.visibility = "visible";
   clone.removeAttribute("hidden");
 
-  const title = target === "receipt" ? "Receipt" : "Analytics summary";
-  const html = buildPrintHtml(title, clone.outerHTML);
+  const paperWidth = config.paperWidth || 80;
+  const title = target === "receipt" ? "Receipt" : target === "stock-report" ? "Stock Report" : "Analytics summary";
+
+  // If Bluetooth printer is configured, use it
+  if (config.printerType === "bluetooth" && config.bluetoothDevice) {
+    try {
+      const textContent = clone.innerText || clone.textContent || "";
+      await printToBluetooth(config.bluetoothDevice, textContent);
+      return;
+    } catch (error) {
+      console.error("Bluetooth print failed, falling back to browser print:", error);
+      // Fall through to browser print
+    }
+  }
+
+  // Browser print
+  const html = buildPrintHtml(title, clone.outerHTML, paperWidth);
 
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const blobUrl = URL.createObjectURL(blob);
@@ -102,7 +179,7 @@ export function printElementById(id: string, target: PrintTarget) {
   iframe.setAttribute("aria-hidden", "true");
   iframe.setAttribute(
     "title",
-    target === "receipt" ? "Print receipt" : "Print summary",
+    target === "receipt" ? "Print receipt" : target === "stock-report" ? "Print stock report" : "Print summary",
   );
   iframe.style.cssText =
     "position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;z-index:-1";
