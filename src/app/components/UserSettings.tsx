@@ -15,6 +15,10 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Printer,
+  Bluetooth,
+  Check,
+  X,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
@@ -22,6 +26,8 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Badge } from "./ui/badge";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -71,6 +77,93 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
   const [showPwCurrent, setShowPwCurrent] = useState(false);
   const [showPwNew, setShowPwNew]         = useState(false);
   const [showPwConfirm, setShowPwConfirm] = useState(false);
+
+  // ── Printer settings state ────────────────────────────────────────────────
+  const [paperWidth, setPaperWidth] = useState("80");
+  const [printerType, setPrinterType] = useState<"browser" | "bluetooth">("browser");
+  const [bluetoothDevice, setBluetoothDevice] = useState<BluetoothDevice | undefined>();
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [printerError, setPrinterError] = useState("");
+  const [printerSuccess, setPrinterSuccess] = useState("");
+
+  // Check if Web Bluetooth API is available
+  const isBluetoothAvailable = typeof navigator !== "undefined" && "bluetooth" in navigator;
+
+  const handleConnectBluetooth = async () => {
+    if (!isBluetoothAvailable) {
+      setPrinterError("Bluetooth is not supported in this browser. Please use Chrome, Edge, or Opera.");
+      return;
+    }
+
+    setIsConnecting(true);
+    setPrinterError("");
+    setPrinterSuccess("");
+
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [
+          { services: ["000018f0-0000-1000-8000-00805f9b34fb"] },
+        ],
+        optionalServices: ["000018f0-0000-1000-8000-00805f9b34fb"],
+      });
+
+      setBluetoothDevice(device);
+      setPrinterType("bluetooth");
+      setPrinterSuccess(`Connected to ${device.name || "Bluetooth Printer"}`);
+      setPrinterError("");
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.name === "NotFoundError") {
+          setPrinterError("No Bluetooth printer found. Make sure your printer is turned on and in pairing mode.");
+        } else if (err.name === "NotAllowedError") {
+          setPrinterError("Bluetooth access was denied.");
+        } else {
+          setPrinterError(`Failed to connect: ${err.message}`);
+        }
+      } else {
+        setPrinterError("Failed to connect to Bluetooth printer.");
+      }
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectBluetooth = () => {
+    setBluetoothDevice(undefined);
+    setPrinterType("browser");
+    setPrinterSuccess("Bluetooth printer disconnected");
+    setTimeout(() => setPrinterSuccess(""), 3000);
+  };
+
+  const handleSavePrinterSettings = () => {
+    const width = parseInt(paperWidth);
+    if (isNaN(width) || width < 40 || width > 120) {
+      setPrinterError("Paper width must be between 40mm and 120mm");
+      return;
+    }
+
+    // Save to localStorage
+    localStorage.setItem("printerConfig", JSON.stringify({
+      paperWidth: width,
+      printerType,
+      deviceName: bluetoothDevice?.name,
+    }));
+
+    setPrinterSuccess("Printer settings saved successfully!");
+    setTimeout(() => setPrinterSuccess(""), 3000);
+  };
+
+  // Load printer settings on mount
+  useState(() => {
+    const saved = localStorage.getItem("printerConfig");
+    if (saved) {
+      try {
+        const config = JSON.parse(saved);
+        setPaperWidth(config.paperWidth?.toString() || "80");
+        setPrinterType(config.printerType || "browser");
+      } catch {}
+    }
+  });
 
   const handleChangePassword = async () => {
     setPwMsg(null);
@@ -129,7 +222,7 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
   return (
     <div className="space-y-6 max-w-4xl">
       <Tabs value={settingsTab} onValueChange={setSettingsTab}>
-        <TabsList className={`grid w-full mb-6 ${isAdmin ? "grid-cols-2" : "grid-cols-1"}`}>
+        <TabsList className={`grid w-full mb-6 ${isAdmin ? "grid-cols-3" : "grid-cols-2"}`}>
           {isAdmin && (
             <TabsTrigger value="admin" className="flex items-center gap-2">
               <Shield className="h-4 w-4" />{t.settings.adminPanel}
@@ -137,6 +230,9 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
           )}
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <User className="h-4 w-4" />{t.settings.accountSettings}
+          </TabsTrigger>
+          <TabsTrigger value="printer" className="flex items-center gap-2">
+            <Printer className="h-4 w-4" />Printer
           </TabsTrigger>
         </TabsList>
 
@@ -362,6 +458,189 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
               </div>
             </CardContent>
           </Card>
+
+        </TabsContent>
+
+        {/* ── PRINTER SETTINGS TAB ── */}
+        <TabsContent value="printer" className="space-y-6 mt-0">
+          
+          {/* Paper Width Configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Printer className="h-5 w-5 text-primary" />
+                Paper Width
+              </CardTitle>
+              <CardDescription>
+                Configure the paper width for receipt printing
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="paperWidth">Paper Width (mm)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="paperWidth"
+                    type="number"
+                    min="40"
+                    max="120"
+                    value={paperWidth}
+                    onChange={(e) => {
+                      setPaperWidth(e.target.value);
+                      setPrinterError("");
+                    }}
+                    placeholder="80"
+                    className="flex-1"
+                  />
+                  <Select value={paperWidth} onValueChange={setPaperWidth}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue placeholder="Preset" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="58">58mm</SelectItem>
+                      <SelectItem value="75">75mm</SelectItem>
+                      <SelectItem value="80">80mm</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Common sizes: 58mm, 75mm, 80mm. Enter your printer's paper width.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Printer Type Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Printer Type</CardTitle>
+              <CardDescription>
+                Choose how you want to print stock reports
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  variant={printerType === "browser" ? "default" : "outline"}
+                  className="h-auto py-6 flex flex-col items-center gap-2"
+                  onClick={() => setPrinterType("browser")}
+                >
+                  <Printer className="h-8 w-8" />
+                  <div className="text-center">
+                    <div className="font-semibold">Browser Print</div>
+                    <div className="text-xs opacity-80">Use system printer</div>
+                  </div>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant={printerType === "bluetooth" ? "default" : "outline"}
+                  className="h-auto py-6 flex flex-col items-center gap-2"
+                  onClick={() => setPrinterType("bluetooth")}
+                  disabled={!isBluetoothAvailable}
+                >
+                  <Bluetooth className="h-8 w-8" />
+                  <div className="text-center">
+                    <div className="font-semibold">Bluetooth</div>
+                    <div className="text-xs opacity-80">Receipt printer</div>
+                  </div>
+                </Button>
+              </div>
+
+              {!isBluetoothAvailable && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                  ⚠️ Bluetooth is not supported in this browser. Use Chrome, Edge, or Opera for Bluetooth printing.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Bluetooth Connection */}
+          {printerType === "bluetooth" && isBluetoothAvailable && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bluetooth className="h-5 w-5 text-blue-600" />
+                  Bluetooth Device
+                </CardTitle>
+                <CardDescription>
+                  Connect to your thermal receipt printer
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {bluetoothDevice ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Bluetooth className="h-5 w-5 text-blue-600" />
+                        <div>
+                          <p className="font-medium">{bluetoothDevice.name || "Unknown Device"}</p>
+                          <p className="text-xs text-muted-foreground">Connected and ready</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                          <Check className="h-3 w-3 mr-1" />
+                          Connected
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleDisconnectBluetooth}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Your receipt printer is connected. Stock reports will print directly to this device.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleConnectBluetooth}
+                      disabled={isConnecting}
+                    >
+                      <Bluetooth className="h-4 w-4 mr-2" />
+                      {isConnecting ? "Connecting..." : "Connect Bluetooth Printer"}
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Make sure your printer is turned on and in pairing mode before connecting.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Success/Error Messages */}
+          {printerSuccess && (
+            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+              <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+              {printerSuccess}
+            </div>
+          )}
+
+          {printerError && (
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {printerError}
+            </div>
+          )}
+
+          {/* Save Button */}
+          <div className="flex justify-end">
+            <Button onClick={handleSavePrinterSettings} size="lg">
+              <Check className="h-4 w-4 mr-2" />
+              Save Printer Settings
+            </Button>
+          </div>
 
         </TabsContent>
 
