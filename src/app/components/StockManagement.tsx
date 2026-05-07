@@ -460,7 +460,7 @@ export function StockManagement({
   const handleReduceSubmit = () => {
     if (!reduceItem || !reduceForm.quantity || parseFloat(reduceForm.quantity) <= 0) return;
     const qty = Math.min(parseFloat(reduceForm.quantity), reduceItem.quantity);
-    onReduceStock(reduceItem.id, qty, reduceForm.reason, reduceForm.notes);
+    onReduceStock(reduceItem.id, qty, reduceForm.reason, reduceForm.notes, reduceItem.costPerUnit);
     setReduceOpen(false); setReduceForm({ quantity: "", reason: "sold", notes: "" }); setReduceItem(null);
   };
 
