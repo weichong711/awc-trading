@@ -5,3 +5,55 @@
 #print-analytics {
   display: none;
 }
+
+/* Print styles for stock report */
+@media print {
+  /* Hide everything except the stock report */
+  body > *:not(#root) {
+    display: none !important;
+  }
+  
+  #root > *:not(.stock-report-print-area) {
+    display: none !important;
+  }
+  
+  /* Hide navigation, tabs, buttons, and controls when printing */
+  .print\\:hidden,
+  nav,
+  header,
+  button:not(.print\\:block),
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Show only the report content */
+  #stock-report-receipt {
+    display: block !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  
+  /* Ensure proper page breaks */
+  .print-page-break {
+    page-break-after: always;
+  }
+  
+  /* Remove backgrounds for printing */
+  * {
+    background: white !important;
+    color: black !important;
+  }
+  
+  /* Keep status badge colors */
+  .bg-green-100,
+  .bg-amber-100,
+  .bg-red-100,
+  .bg-orange-100,
+  .bg-red-200 {
+    background: #f0f0f0 !important;
+    border: 1px solid #ccc !important;
+  }
+}
