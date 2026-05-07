@@ -3,7 +3,7 @@ import {
   Package2, Plus, Minus, Trash2, AlertTriangle, CheckCircle2,
   Clock, XCircle, ChevronDown, ChevronUp, Search, History,
   RefreshCw, ArrowDownCircle, ArrowUpCircle, Link2, TrendingDown,
-  BarChart3, Square, CheckSquare, Edit, MoreVertical, Upload, Eye, EyeOff, Printer, Settings,
+  BarChart3, Square, CheckSquare, Edit, MoreVertical, Upload, Eye, EyeOff, Printer,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -25,7 +25,6 @@ import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { StockItem, StockAdjustment, UnitType, Expense, DeleteRecord, DeleteReason, Product } from "../types/business";
 import { useLanguage } from "../contexts/LanguageContext";
-import { PrinterSettings } from "./PrinterSettings";
 import { printElementById } from "../../lib/print";
 
 const UNITS: UnitType[] = ["unit", "kg", "gram", "liter", "ml", "piece"];
@@ -191,18 +190,29 @@ export function StockManagement({
   const [uploadingImage, setUploadingImage] = useState(false);
 
   // -- Printer settings -------------------------------------------------------
-  const [printerSettingsOpen, setPrinterSettingsOpen] = useState(false);
-  const [printerConfig, setPrinterConfig] = useState<{
-    paperWidth: number;
-    printerType: "browser" | "bluetooth";
-    bluetoothDevice?: BluetoothDevice;
-    deviceName?: string;
-  }>({
-    paperWidth: 80,
-    printerType: "browser",
-    bluetoothDevice: undefined,
-    deviceName: undefined,
-  });
+  // Load printer settings from localStorage
+  const getPrinterConfig = () => {
+    try {
+      const saved = localStorage.getItem("printerConfig");
+      if (saved) {
+        const config = JSON.parse(saved);
+        return {
+          paperWidth: config.paperWidth || 80,
+          printerType: config.printerType || "browser",
+          bluetoothDevice: undefined, // Can't serialize BluetoothDevice
+          deviceName: config.deviceName,
+        };
+      }
+    } catch {}
+    return {
+      paperWidth: 80,
+      printerType: "browser" as "browser" | "bluetooth",
+      bluetoothDevice: undefined,
+      deviceName: undefined,
+    };
+  };
+
+  const [printerConfig] = useState(getPrinterConfig());
 
   // -- Product management -----------------------------------------------------
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -1139,17 +1149,8 @@ export function StockManagement({
       {/* -- REPORT TAB ------------------------------------------------------ */}
       {activeTab === "report" && (
         <div className="space-y-4">
-          {/* Print buttons outside card - hide when printing */}
-          <div className="flex justify-end gap-2 print:hidden no-print">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPrinterSettingsOpen(true)}
-              className="flex items-center gap-2"
-            >
-              <Settings className="h-4 w-4" />
-              Printer Settings
-            </Button>
+          {/* Print button outside card - hide when printing */}
+          <div className="flex justify-end print:hidden no-print">
             <Button
               variant="default"
               size="sm"
@@ -2076,14 +2077,6 @@ export function StockManagement({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Printer Settings Dialog */}
-      <PrinterSettings
-        open={printerSettingsOpen}
-        onOpenChange={setPrinterSettingsOpen}
-        onSave={setPrinterConfig}
-        currentConfig={printerConfig}
-      />
 
     </div>
   );
