@@ -779,21 +779,18 @@ export function StockManagement({
               </Button>
             )}
             
-            {/* Select button - toggles select mode */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSelectMode(!selectMode);
-                if (selectMode) {
-                  setSelectedItems(new Set());
-                }
-              }}
-              className="flex items-center gap-2"
-            >
-              <CheckSquare className="h-4 w-4" />
-              Select
-            </Button>
+            {/* Select button - only visible when NOT in select mode */}
+            {!selectMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectMode(true)}
+                className="flex items-center gap-2"
+              >
+                <CheckSquare className="h-4 w-4" />
+                Select
+              </Button>
+            )}
             
             {/* Select All button - only visible in select mode */}
             {selectMode && (
@@ -1043,94 +1040,81 @@ export function StockManagement({
         </Card>
       )}
 
-      {/* -- DELETE HISTORY TAB ------------------------------------------------- */}
+      {/* -- REDUCE STOCK HISTORY TAB ------------------------------------------ */}
       {activeTab === "delete_history" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Trash2 className="h-4 w-4 text-red-600" />Delete History
+              <ArrowDownCircle className="h-4 w-4 text-red-600" />Reduce Stock History
             </CardTitle>
             <CardDescription>
-              {deleteRecords.length} delete records with financial impact tracking
+              {stockAdjustments.filter(adj => adj.adjustmentType === "reduce" && adj.reason !== "received" && activeStockIds.has(adj.stockItemId)).length} reduction records (sold, expired, broken, etc.)
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {deleteRecords.length === 0 ? (
+            {stockAdjustments.filter(adj => adj.adjustmentType === "reduce" && adj.reason !== "received" && activeStockIds.has(adj.stockItemId)).length === 0 ? (
               <div className="text-center py-10 text-muted-foreground">
-                <Trash2 className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No delete history yet</p>
+                <ArrowDownCircle className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No reduce stock history yet</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date & Time</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="text-center">Quantity</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead className="text-right">Value</TableHead>
-                      <TableHead className="text-right">Financial Impact</TableHead>
-                      <TableHead>Notes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[...deleteRecords]
-                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                      .map(record => {
-                        const reasonInfo = DELETE_REASONS.find(r => r.value === record.reason);
-                        return (
-                          <TableRow key={record.id}>
-                            <TableCell className="text-sm whitespace-nowrap">
-                              {new Date(record.date).toLocaleDateString()}{" "}
-                              <span className="text-muted-foreground text-xs">
-                                {new Date(record.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                            </TableCell>
-                            <TableCell className="font-medium">{record.productName}</TableCell>
-                            <TableCell className="text-center">
-                              <span className="font-mono font-semibold text-red-600">-{record.quantity}</span>
-                              <span className="text-xs text-muted-foreground ml-1">{record.unit}</span>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-lg">{reasonInfo?.icon}</span>
-                                <span className="text-sm">{reasonInfo?.label}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <span className="text-sm font-mono">RM {record.totalValue.toFixed(2)}</span>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {record.financialImpact === "refund" ? (
-                                <div className="flex items-center justify-end gap-1">
-                                  <span className="text-sm font-semibold text-green-600">
-                                    -RM {record.impactAmount.toFixed(2)}
-                                  </span>
-                                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                                    Refund
-                                  </Badge>
-                                </div>
-                              ) : (
-                                <div className="flex items-center justify-end gap-1">
-                                  <span className="text-sm font-semibold text-red-600">
-                                    +RM {record.impactAmount.toFixed(2)}
-                                  </span>
-                                  <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
-                                    Loss
-                                  </Badge>
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">
-                              {record.notes || "—"}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                  </TableBody>
-                </Table>
-              </div>
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{s.colDateTime}</TableHead>
+                        <TableHead>{s.colProduct}</TableHead>
+                        <TableHead className="text-center">{s.colQtyChanged}</TableHead>
+                        <TableHead className="text-center">{s.colBeforeAfter}</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>{s.colNotes}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[...stockAdjustments]
+                        .filter(adj => adj.adjustmentType === "reduce" && adj.reason !== "received" && activeStockIds.has(adj.stockItemId))
+                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        .slice(0, historyShowAll ? undefined : HISTORY_LIMIT)
+                        .map(adj => {
+                          const reasonLabel = REDUCE_REASONS.find(r => r.value === adj.reason)?.label || adj.reason;
+                          return (
+                            <TableRow key={adj.id}>
+                              <TableCell className="text-sm whitespace-nowrap">
+                                {new Date(adj.date).toLocaleDateString()}{" "}
+                                <span className="text-muted-foreground text-xs">
+                                  {new Date(adj.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </TableCell>
+                              <TableCell className="font-medium">{adj.productName}</TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-mono font-semibold text-red-600">-{adj.quantity}</span>
+                              </TableCell>
+                              <TableCell className="text-center text-sm font-mono text-muted-foreground">
+                                {adj.previousQty} <ArrowDownCircle className="h-3 w-3 inline text-red-500 mx-1" /> <strong className="text-foreground">{adj.newQty}</strong>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">{reasonLabel}</Badge>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">
+                                {adj.notes || "—"}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+                </div>
+                {stockAdjustments.filter(adj => adj.adjustmentType === "reduce" && adj.reason !== "received" && activeStockIds.has(adj.stockItemId)).length > HISTORY_LIMIT && (
+                  <div className="flex justify-center py-3 border-t">
+                    <Button variant="ghost" size="sm" onClick={() => setHistoryShowAll(v => !v)}>
+                      {historyShowAll
+                        ? <><ChevronUp className="h-4 w-4 mr-1" />{t.analytics.showLess}</>
+                        : <><ChevronDown className="h-4 w-4 mr-1" />{t.analytics.showAll} ({stockAdjustments.filter(adj => adj.adjustmentType === "reduce" && adj.reason !== "received" && activeStockIds.has(adj.stockItemId)).length})</>}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -1139,8 +1123,8 @@ export function StockManagement({
       {/* -- REPORT TAB ------------------------------------------------------ */}
       {activeTab === "report" && (
         <div className="space-y-4">
-          {/* Print button outside card */}
-          <div className="flex justify-end">
+          {/* Print button outside card - hide when printing */}
+          <div className="flex justify-end print:hidden no-print">
             <Button
               variant="outline"
               size="sm"
@@ -1152,8 +1136,8 @@ export function StockManagement({
             </Button>
           </div>
 
-          {/* Receipt-style report */}
-          <div id="stock-report-receipt" className="max-w-3xl mx-auto bg-white border rounded-lg p-8 print:border-0 print:shadow-none">
+          {/* Receipt-style report - this is what gets printed */}
+          <div id="stock-report-receipt" className="stock-report-print-area max-w-3xl mx-auto bg-white border rounded-lg p-8 print:border-0 print:shadow-none print:p-4">
             {/* Header */}
             <div className="text-center border-b-2 border-dashed pb-4 mb-6">
               <h1 className="text-2xl font-bold mb-1">STOCK INVENTORY REPORT</h1>
