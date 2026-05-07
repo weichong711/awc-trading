@@ -717,10 +717,13 @@ export function StockManagement({
         <div className="space-y-4">
           {/* Search + filter + bulk actions */}
           <div className="flex flex-wrap gap-2 items-center">
-            <div className="relative flex-1 min-w-[200px]">
+            {/* Search bar - shorter width */}
+            <div className="relative w-[250px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input className="pl-9" placeholder={s.searchPlaceholder} value={search} onChange={e => setSearch(e.target.value)} />
             </div>
+            
+            {/* Status filter select box */}
             <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -733,47 +736,51 @@ export function StockManagement({
               </SelectContent>
             </Select>
             
-            {/* Global Actions Menu (3-dot) */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-10 w-10 p-0">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSelectMode(!selectMode);
-                    if (selectMode) setSelectedItems(new Set()); // Clear selection when exiting
-                  }}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  {selectMode ? <Square className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
-                  <span>{selectMode ? "Exit Select Mode" : "Select"}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={selectAll}
-                  disabled={filtered.length === 0}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <CheckSquare className="h-4 w-4" />
-                  <span>Select All</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (selectedItems.size > 0) {
-                      setBulkDeleteConfirmOpen(true);
-                    }
-                  }}
-                  disabled={selectedItems.size === 0}
-                  className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-600"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Delete {selectedItems.size > 0 ? `(${selectedItems.size})` : ''}</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Delete button - only visible when items selected */}
+            {selectedItems.size > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteConfirmOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete ({selectedItems.size})
+              </Button>
+            )}
+            
+            {/* Cancel button - only visible in select mode */}
+            {selectMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectMode(false);
+                  setSelectedItems(new Set());
+                }}
+                className="flex items-center gap-2"
+              >
+                <XCircle className="h-4 w-4" />
+                Cancel
+              </Button>
+            )}
+            
+            {/* Select All button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (!selectMode) {
+                  setSelectMode(true);
+                }
+                selectAll();
+              }}
+              disabled={filtered.length === 0}
+              className="flex items-center gap-2"
+            >
+              <CheckSquare className="h-4 w-4" />
+              Select All
+            </Button>
           </div>
 
           {/* Stock Card Grid */}
