@@ -695,7 +695,7 @@ export function StockManagement({
         {([
           { key: "inventory", label: "Inventory", icon: <Package2 className="h-4 w-4" /> },
           { key: "topup_history", label: "Top-Up History", icon: <ArrowUpCircle className="h-4 w-4" /> },
-          { key: "delete_history", label: "Delete History", icon: <Trash2 className="h-4 w-4" /> },
+          { key: "delete_history", label: "Reduce Stock History", icon: <Trash2 className="h-4 w-4" /> },
           { key: "report", label: "Summary Report", icon: <BarChart3 className="h-4 w-4" /> },
         ] as { key: ActiveTab; label: string; icon: React.ReactNode }[]).map(tab => (
           <button
@@ -717,10 +717,24 @@ export function StockManagement({
         <div className="space-y-4">
           {/* Search + filter + bulk actions */}
           <div className="flex flex-wrap gap-2 items-center">
-            {/* Search bar - shorter width */}
+            {/* Search bar with clear button */}
             <div className="relative w-[250px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-9" placeholder={s.searchPlaceholder} value={search} onChange={e => setSearch(e.target.value)} />
+              <Input 
+                className="pl-9 pr-9" 
+                placeholder={s.searchPlaceholder} 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Clear search"
+                >
+                  <XCircle className="h-4 w-4" />
+                </button>
+              )}
             </div>
             
             {/* Status filter select box */}
@@ -765,22 +779,35 @@ export function StockManagement({
               </Button>
             )}
             
-            {/* Select All button */}
+            {/* Select button - toggles select mode */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
-                if (!selectMode) {
-                  setSelectMode(true);
+                setSelectMode(!selectMode);
+                if (selectMode) {
+                  setSelectedItems(new Set());
                 }
-                selectAll();
               }}
-              disabled={filtered.length === 0}
               className="flex items-center gap-2"
             >
               <CheckSquare className="h-4 w-4" />
-              Select All
+              Select
             </Button>
+            
+            {/* Select All button - only visible in select mode */}
+            {selectMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={selectAll}
+                disabled={filtered.length === 0}
+                className="flex items-center gap-2"
+              >
+                <CheckSquare className="h-4 w-4" />
+                Select All
+              </Button>
+            )}
           </div>
 
           {/* Stock Card Grid */}
@@ -1112,119 +1139,152 @@ export function StockManagement({
       {/* -- REPORT TAB ------------------------------------------------------ */}
       {activeTab === "report" && (
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <BarChart3 className="h-4 w-4 text-primary" />Summary Report
-                  </CardTitle>
-                  <CardDescription>
-                    Active stock only � deleted items are excluded
-                  </CardDescription>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.print()}
-                  className="flex items-center gap-2"
-                >
-                  <Printer className="h-4 w-4" />
-                  Print
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* Summary totals */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                <div className="p-3 bg-muted/40 rounded-lg">
-                  <p className="text-xs text-muted-foreground">Total Items</p>
-                  <p className="text-2xl font-bold">{stockItems.length}</p>
-                </div>
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <p className="text-xs text-muted-foreground">Total Stock Value</p>
-                  <p className="text-2xl font-bold text-green-700">RM {totalStockValue.toFixed(2)}</p>
-                </div>
-                <div className="p-3 bg-amber-50 rounded-lg">
-                  <p className="text-xs text-muted-foreground">Low / Out of Stock</p>
-                  <p className="text-2xl font-bold text-amber-700">{stats.low + stats.out}</p>
-                </div>
-                <div className="p-3 bg-orange-50 rounded-lg">
-                  <p className="text-xs text-muted-foreground">Expiring / Expired</p>
-                  <p className="text-2xl font-bold text-orange-700">{stats.expiringSoon + stats.expired}</p>
-                </div>
-              </div>
+          {/* Print button outside card */}
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="flex items-center gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              Print Report
+            </Button>
+          </div>
 
-              {/* Per-item breakdown */}
+          {/* Receipt-style report */}
+          <div id="stock-report-receipt" className="max-w-3xl mx-auto bg-white border rounded-lg p-8 print:border-0 print:shadow-none">
+            {/* Header */}
+            <div className="text-center border-b-2 border-dashed pb-4 mb-6">
+              <h1 className="text-2xl font-bold mb-1">STOCK INVENTORY REPORT</h1>
+              <p className="text-sm text-muted-foreground">
+                Generated: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
+              </p>
+            </div>
+
+            {/* Summary Section */}
+            <div className="mb-6 space-y-3">
+              <h2 className="text-lg font-semibold border-b pb-2">SUMMARY</h2>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="font-medium">Total Items:</span>
+                  <span className="font-bold">{stockItems.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Total Stock Value:</span>
+                  <span className="font-bold text-green-700">RM {totalStockValue.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Low Stock:</span>
+                  <span className="font-bold text-amber-700">{stats.low}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Out of Stock:</span>
+                  <span className="font-bold text-red-700">{stats.out}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Expiring Soon:</span>
+                  <span className="font-bold text-orange-700">{stats.expiringSoon}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Expired:</span>
+                  <span className="font-bold text-red-700">{stats.expired}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Items List */}
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold border-b pb-2 mb-4">INVENTORY DETAILS</h2>
               {stockItems.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground">
                   <Package2 className="h-10 w-10 mx-auto mb-2 opacity-30" />
                   <p className="text-sm">No active stock to report</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{s.colProduct}</TableHead>
-                        <TableHead>{s.colCategory}</TableHead>
-                        <TableHead className="text-center">{s.colQty}</TableHead>
-                        <TableHead className="text-right">{s.colAvgCost}</TableHead>
-                        <TableHead className="text-right">{s.colStockValue}</TableHead>
-                        <TableHead>{s.colExpiry}</TableHead>
-                        <TableHead>{s.colStatus}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {[...stockItems]
-                        .sort((a, b) => {
-                          const order: Record<string, number> = { expired: 0, expiring_soon: 1, out: 2, low: 3, good: 4 };
-                          return (order[getStockStatus(a)] ?? 5) - (order[getStockStatus(b)] ?? 5);
-                        })
-                        .map(item => {
-                          const status = getStockStatus(item);
-                          const avgCost = costMap.get(item.id)?.avgCost ?? 0;
-                          const stockValue = item.quantity * avgCost;
-                          const expDays = item.expiryDate ? daysUntilExpiry(item.expiryDate) : 0;
-                          return (
-                            <TableRow key={item.id} className={status === "expired" ? "bg-red-50/50" : status === "expiring_soon" ? "bg-orange-50/30" : ""}>
-                              <TableCell className="font-medium">{item.productName}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="text-xs">{item.category}</Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <span className={`font-bold ${item.quantity === 0 ? "text-red-600" : item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" : "text-foreground"}`}>
-                                  {item.quantity}
-                                </span>
-                                <span className="text-xs text-muted-foreground ml-1">{item.unit}</span>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {avgCost > 0 ? <span className="text-sm">RM {avgCost.toFixed(2)}</span> : <span className="text-xs text-muted-foreground">�</span>}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {stockValue > 0 ? <span className="text-sm font-semibold text-primary">RM {stockValue.toFixed(2)}</span> : <span className="text-xs text-muted-foreground">�</span>}
-                              </TableCell>
-                              <TableCell>
-                                {item.expiryDate ? (
-                                  <div>
-                                    <p className={`text-sm font-medium ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : "text-foreground"}`}>
-                                      {new Date(item.expiryDate).toLocaleDateString()}
-                                    </p>
-                                    {status === "expiring_soon" && <p className="text-xs text-orange-500">{expDays}{s.dLeft}</p>}
-                                    {status === "expired" && <p className="text-xs text-red-500">{Math.abs(expDays)}{s.dAgo}</p>}
-                                  </div>
-                                ) : <span className="text-xs text-muted-foreground">�</span>}
-                              </TableCell>
-                              <TableCell><StatusBadge status={status} labels={statusLabels} /></TableCell>
-                            </TableRow>
-                          );
-                        })}
-                    </TableBody>
-                  </Table>
+                <div className="space-y-4">
+                  {[...stockItems]
+                    .sort((a, b) => {
+                      const order: Record<string, number> = { expired: 0, expiring_soon: 1, out: 2, low: 3, good: 4 };
+                      return (order[getStockStatus(a)] ?? 5) - (order[getStockStatus(b)] ?? 5);
+                    })
+                    .map((item, index) => {
+                      const status = getStockStatus(item);
+                      const avgCost = costMap.get(item.id)?.avgCost ?? 0;
+                      const stockValue = item.quantity * avgCost;
+                      const expDays = item.expiryDate ? daysUntilExpiry(item.expiryDate) : 0;
+                      
+                      return (
+                        <div key={item.id} className={`border-b pb-3 ${status === "expired" || status === "out" ? "bg-red-50/30" : status === "expiring_soon" || status === "low" ? "bg-amber-50/30" : ""}`}>
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-base">{index + 1}. {item.productName}</span>
+                                <span className="text-xs px-2 py-0.5 bg-muted rounded">{item.category}</span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className={`font-bold text-lg ${item.quantity === 0 ? "text-red-600" : item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" : "text-foreground"}`}>
+                                {item.quantity} {item.unit}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                            <div className="flex justify-between">
+                              <span>Cost per unit:</span>
+                              <span className="font-mono">{avgCost > 0 ? `RM ${avgCost.toFixed(2)}` : "—"}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Stock value:</span>
+                              <span className="font-mono font-semibold text-primary">{stockValue > 0 ? `RM ${stockValue.toFixed(2)}` : "—"}</span>
+                            </div>
+                            {item.expiryDate && (
+                              <>
+                                <div className="flex justify-between">
+                                  <span>Expiry date:</span>
+                                  <span className={`font-medium ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : ""}`}>
+                                    {new Date(item.expiryDate).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Days:</span>
+                                  <span className={`font-medium ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : ""}`}>
+                                    {status === "expired" ? `${Math.abs(expDays)} days ago` : status === "expiring_soon" ? `${expDays} days left` : "OK"}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          
+                          <div className="mt-2">
+                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${
+                              status === "good" ? "bg-green-100 text-green-700" :
+                              status === "low" ? "bg-amber-100 text-amber-700" :
+                              status === "out" ? "bg-red-100 text-red-700" :
+                              status === "expiring_soon" ? "bg-orange-100 text-orange-700" :
+                              "bg-red-200 text-red-800"
+                            }`}>
+                              {status === "good" && "✓ Good Stock"}
+                              {status === "low" && "⚠ Low Stock"}
+                              {status === "out" && "✗ Out of Stock"}
+                              {status === "expiring_soon" && "⏰ Expiring Soon"}
+                              {status === "expired" && "✗ Expired"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t-2 border-dashed pt-4 mt-6 text-center text-sm text-muted-foreground">
+              <p>End of Report</p>
+              <p className="text-xs mt-1">This report shows active stock only. Deleted items are excluded.</p>
+            </div>
+          </div>
         </div>
       )}
 
