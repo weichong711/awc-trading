@@ -3,7 +3,7 @@ import {
   Package2, Plus, Minus, Trash2, AlertTriangle, CheckCircle2,
   Clock, XCircle, ChevronDown, ChevronUp, Search, History,
   RefreshCw, ArrowDownCircle, ArrowUpCircle, Link2, TrendingDown,
-  BarChart3, Square, CheckSquare, Edit, MoreVertical, Upload, Eye, EyeOff, Printer,
+  BarChart3, Square, CheckSquare, Edit, MoreVertical, Upload, Eye, EyeOff, Printer, Settings,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -25,6 +25,8 @@ import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { StockItem, StockAdjustment, UnitType, Expense, DeleteRecord, DeleteReason, Product } from "../types/business";
 import { useLanguage } from "../contexts/LanguageContext";
+import { PrinterSettings } from "./PrinterSettings";
+import { printElementById } from "../../lib/print";
 
 const UNITS: UnitType[] = ["unit", "kg", "gram", "liter", "ml", "piece"];
 const LOW_STOCK_THRESHOLD = 10;
@@ -187,6 +189,20 @@ export function StockManagement({
 
   // -- Image upload -----------------------------------------------------------
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  // -- Printer settings -------------------------------------------------------
+  const [printerSettingsOpen, setPrinterSettingsOpen] = useState(false);
+  const [printerConfig, setPrinterConfig] = useState<{
+    paperWidth: number;
+    printerType: "browser" | "bluetooth";
+    bluetoothDevice?: BluetoothDevice;
+    deviceName?: string;
+  }>({
+    paperWidth: 80,
+    printerType: "browser",
+    bluetoothDevice: undefined,
+    deviceName: undefined,
+  });
 
   // -- Product management -----------------------------------------------------
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -1123,12 +1139,21 @@ export function StockManagement({
       {/* -- REPORT TAB ------------------------------------------------------ */}
       {activeTab === "report" && (
         <div className="space-y-4">
-          {/* Print button outside card - hide when printing */}
-          <div className="flex justify-end print:hidden no-print">
+          {/* Print buttons outside card - hide when printing */}
+          <div className="flex justify-end gap-2 print:hidden no-print">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.print()}
+              onClick={() => setPrinterSettingsOpen(true)}
+              className="flex items-center gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              Printer Settings
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => printElementById("stock-report-receipt", "stock-report", printerConfig)}
               className="flex items-center gap-2"
             >
               <Printer className="h-4 w-4" />
@@ -1137,56 +1162,81 @@ export function StockManagement({
           </div>
 
           {/* Receipt-style report - this is what gets printed */}
-          <div id="stock-report-receipt" className="stock-report-print-area max-w-3xl mx-auto bg-white border rounded-lg p-8 print:border-0 print:shadow-none print:p-4">
-            {/* Header */}
-            <div className="text-center border-b-2 border-dashed pb-4 mb-6">
-              <h1 className="text-2xl font-bold mb-1">STOCK INVENTORY REPORT</h1>
-              <p className="text-sm text-muted-foreground">
-                Generated: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
-              </p>
-            </div>
-
-            {/* Summary Section */}
-            <div className="mb-6 space-y-3">
-              <h2 className="text-lg font-semibold border-b pb-2">SUMMARY</h2>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+          <div id="stock-report-receipt" className="stock-report-print-area max-w-2xl mx-auto bg-white p-8 print:p-4">
+            {/* Receipt-style header with ASCII border */}
+            <div className="border-4 border-dashed border-black p-6 mb-6 font-mono">
+              <div className="text-center mb-4">
+                <h1 className="text-2xl font-bold mb-2">STOCK MANAGEMENT</h1>
+                <h2 className="text-xl font-semibold">INVENTORY SUMMARY</h2>
+              </div>
+              
+              <div className="border-t-2 border-dashed border-black my-4"></div>
+              
+              <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="font-medium">Total Items:</span>
-                  <span className="font-bold">{stockItems.length}</span>
+                  <span>Date:</span>
+                  <span className="font-bold">{new Date().toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="font-medium">Total Stock Value:</span>
-                  <span className="font-bold text-green-700">RM {totalStockValue.toFixed(2)}</span>
+                  <span>Time:</span>
+                  <span className="font-bold">{new Date().toLocaleTimeString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="font-medium">Low Stock:</span>
-                  <span className="font-bold text-amber-700">{stats.low}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Out of Stock:</span>
-                  <span className="font-bold text-red-700">{stats.out}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Expiring Soon:</span>
-                  <span className="font-bold text-orange-700">{stats.expiringSoon}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Expired:</span>
-                  <span className="font-bold text-red-700">{stats.expired}</span>
+                  <span>Period:</span>
+                  <span className="font-bold">{new Date().getFullYear()} (All Months)</span>
                 </div>
               </div>
             </div>
 
-            {/* Items List */}
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold border-b pb-2 mb-4">INVENTORY DETAILS</h2>
-              {stockItems.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground">
-                  <Package2 className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">No active stock to report</p>
+            {/* Summary Statistics */}
+            <div className="space-y-3 mb-6 font-mono text-base">
+              <div className="flex justify-between">
+                <span>Total Items</span>
+                <span className="font-bold">{stockItems.length}</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span>Total Stock Value</span>
+                <span className="font-bold">RM {totalStockValue.toFixed(2)}</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span>Low Stock Items</span>
+                <span className="font-bold text-amber-700">{stats.low}</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span>Out of Stock</span>
+                <span className="font-bold text-red-700">{stats.out}</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span>Expiring Soon</span>
+                <span className="font-bold text-orange-700">{stats.expiringSoon}</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span>Expired Items</span>
+                <span className="font-bold text-red-700">{stats.expired}</span>
+              </div>
+              
+              <div className="border-t-4 border-dashed border-black my-4"></div>
+              
+              <div className="border-4 border-dashed border-black p-3">
+                <div className="flex justify-between text-lg">
+                  <span className="font-bold">Stock Health</span>
+                  <span className="font-bold">{stats.good} Good</span>
                 </div>
-              ) : (
-                <div className="space-y-4">
+              </div>
+            </div>
+
+            {/* Detailed Inventory List */}
+            {stockItems.length > 0 && (
+              <div className="mb-6">
+                <div className="border-t-2 border-dashed border-black my-4"></div>
+                <h3 className="font-mono font-bold text-lg mb-4">DETAILED INVENTORY</h3>
+                
+                <div className="space-y-4 font-mono text-sm">
                   {[...stockItems]
                     .sort((a, b) => {
                       const order: Record<string, number> = { expired: 0, expiring_soon: 1, out: 2, low: 3, good: 4 };
@@ -1196,77 +1246,65 @@ export function StockManagement({
                       const status = getStockStatus(item);
                       const avgCost = costMap.get(item.id)?.avgCost ?? 0;
                       const stockValue = item.quantity * avgCost;
-                      const expDays = item.expiryDate ? daysUntilExpiry(item.expiryDate) : 0;
                       
                       return (
-                        <div key={item.id} className={`border-b pb-3 ${status === "expired" || status === "out" ? "bg-red-50/30" : status === "expiring_soon" || status === "low" ? "bg-amber-50/30" : ""}`}>
+                        <div key={item.id} className="border-b border-dashed border-gray-400 pb-3">
                           <div className="flex justify-between items-start mb-2">
                             <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-base">{index + 1}. {item.productName}</span>
-                                <span className="text-xs px-2 py-0.5 bg-muted rounded">{item.category}</span>
-                              </div>
+                              <div className="font-bold">{index + 1}. {item.productName}</div>
+                              <div className="text-xs text-gray-600">[{item.category}]</div>
                             </div>
                             <div className="text-right">
-                              <div className={`font-bold text-lg ${item.quantity === 0 ? "text-red-600" : item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" : "text-foreground"}`}>
+                              <div className={`font-bold ${item.quantity === 0 ? "text-red-600" : item.quantity <= LOW_STOCK_THRESHOLD ? "text-amber-600" : ""}`}>
                                 {item.quantity} {item.unit}
                               </div>
                             </div>
                           </div>
                           
-                          <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                          <div className="space-y-1 text-xs pl-4">
                             <div className="flex justify-between">
                               <span>Cost per unit:</span>
-                              <span className="font-mono">{avgCost > 0 ? `RM ${avgCost.toFixed(2)}` : "—"}</span>
+                              <span>{avgCost > 0 ? `RM ${avgCost.toFixed(2)}` : "—"}</span>
                             </div>
                             <div className="flex justify-between">
                               <span>Stock value:</span>
-                              <span className="font-mono font-semibold text-primary">{stockValue > 0 ? `RM ${stockValue.toFixed(2)}` : "—"}</span>
+                              <span className="font-bold">{stockValue > 0 ? `RM ${stockValue.toFixed(2)}` : "—"}</span>
                             </div>
                             {item.expiryDate && (
-                              <>
-                                <div className="flex justify-between">
-                                  <span>Expiry date:</span>
-                                  <span className={`font-medium ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : ""}`}>
-                                    {new Date(item.expiryDate).toLocaleDateString()}
-                                  </span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Days:</span>
-                                  <span className={`font-medium ${status === "expired" ? "text-red-600" : status === "expiring_soon" ? "text-orange-600" : ""}`}>
-                                    {status === "expired" ? `${Math.abs(expDays)} days ago` : status === "expiring_soon" ? `${expDays} days left` : "OK"}
-                                  </span>
-                                </div>
-                              </>
+                              <div className="flex justify-between">
+                                <span>Expiry:</span>
+                                <span className={status === "expired" ? "text-red-600 font-bold" : status === "expiring_soon" ? "text-orange-600 font-bold" : ""}>
+                                  {new Date(item.expiryDate).toLocaleDateString()}
+                                </span>
+                              </div>
                             )}
-                          </div>
-                          
-                          <div className="mt-2">
-                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${
-                              status === "good" ? "bg-green-100 text-green-700" :
-                              status === "low" ? "bg-amber-100 text-amber-700" :
-                              status === "out" ? "bg-red-100 text-red-700" :
-                              status === "expiring_soon" ? "bg-orange-100 text-orange-700" :
-                              "bg-red-200 text-red-800"
-                            }`}>
-                              {status === "good" && "✓ Good Stock"}
-                              {status === "low" && "⚠ Low Stock"}
-                              {status === "out" && "✗ Out of Stock"}
-                              {status === "expiring_soon" && "⏰ Expiring Soon"}
-                              {status === "expired" && "✗ Expired"}
-                            </span>
+                            <div className="flex justify-between">
+                              <span>Status:</span>
+                              <span className={`font-bold ${
+                                status === "good" ? "text-green-700" :
+                                status === "low" ? "text-amber-700" :
+                                status === "out" ? "text-red-700" :
+                                status === "expiring_soon" ? "text-orange-700" :
+                                "text-red-700"
+                              }`}>
+                                {status === "good" && "Good"}
+                                {status === "low" && "Low Stock"}
+                                {status === "out" && "Out of Stock"}
+                                {status === "expiring_soon" && "Expiring Soon"}
+                                {status === "expired" && "Expired"}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Footer */}
-            <div className="border-t-2 border-dashed pt-4 mt-6 text-center text-sm text-muted-foreground">
-              <p>End of Report</p>
-              <p className="text-xs mt-1">This report shows active stock only. Deleted items are excluded.</p>
+            <div className="border-4 border-dashed border-black p-4 text-center font-mono">
+              <p className="font-bold">— End —</p>
             </div>
           </div>
         </div>
@@ -2038,6 +2076,14 @@ export function StockManagement({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Printer Settings Dialog */}
+      <PrinterSettings
+        open={printerSettingsOpen}
+        onOpenChange={setPrinterSettingsOpen}
+        onSave={setPrinterConfig}
+        currentConfig={printerConfig}
+      />
 
     </div>
   );
