@@ -1428,6 +1428,18 @@ export function StockManagement({
               <label className="text-sm font-medium">{s.notes} <span className="text-muted-foreground font-normal">({s.optional})</span></label>
               <Input placeholder={s.notesPH} value={reduceForm.notes} onChange={e => setReduceForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
+            
+            {/* Warning when no cost per unit */}
+            {reduceItem && !reduceItem.costPerUnit && reduceForm.reason !== "sold" && reduceForm.reason !== "adjustment" && (
+              <div className="p-3 rounded-lg border border-yellow-200 bg-yellow-50 text-sm">
+                <p className="text-yellow-800 font-medium">⚠️ No cost per unit set</p>
+                <p className="text-yellow-700 text-xs mt-1">
+                  This stock item has no cost per unit. The expense will not be tracked in Analytics.
+                  {reduceForm.reason === "returned" && " The refund amount cannot be calculated."}
+                </p>
+              </div>
+            )}
+            
             {reduceForm.quantity && parseFloat(reduceForm.quantity) > 0 && reduceItem && (
               <div className={`p-3 rounded-lg border text-sm ${parseFloat(reduceForm.quantity) >= reduceItem.quantity ? "bg-red-50 border-red-200" : "bg-orange-50 border-orange-200"}`}>
                 <p>{s.afterReduction} <strong>{Math.max(0, reduceItem.quantity - parseFloat(reduceForm.quantity)).toFixed(2)} {reduceItem.unit}</strong></p>
