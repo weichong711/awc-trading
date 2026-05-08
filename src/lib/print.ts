@@ -1,12 +1,15 @@
 /// <reference types="vite/client" />
 import printFrameCss from "../styles/print-frame.css?raw";
+import { printToBluetoothPrinter, getSavedBluetoothDevice } from "./bluetooth-print";
 
 export type PrintTarget = "receipt" | "analytics" | "stock-report";
 
 interface PrintConfig {
   paperWidth?: number; // in mm
-  printerType?: "browser" | "bluetooth";
-  bluetoothDevice?: BluetoothDevice;
+  printerType?: "browser" | "bluetooth" | "network";
+  deviceId?: string; // Bluetooth device ID
+  networkIp?: string; // IP address for network printer
+  networkPort?: number; // Port for network printer (default 9100)
 }
 
 function buildPrintHtml(title: string, bodyHtml: string, paperWidth: number = 80) {
@@ -59,37 +62,9 @@ function printWhenReady(win: Window) {
 /**
  * Print to Bluetooth receipt printer using ESC/POS commands
  */
-async function printToBluetooth(device: BluetoothDevice, content: string): Promise<void> {
+async function printToBluetooth(deviceId: string | undefined, content: string): Promise<void> {
   try {
-    const server = await device.gatt?.connect();
-    if (!server) throw new Error("Failed to connect to GATT server");
-
-    // Thermal printer service UUID
-    const service = await server.getPrimaryService("000018f0-0000-1000-8000-00805f9b34fb");
-    const characteristic = await service.getCharacteristic("00002af1-0000-1000-8000-00805f9b34fb");
-
-    // Convert content to ESC/POS commands
-    const encoder = new TextEncoder();
-    
-    // Initialize printer
-    const init = new Uint8Array([0x1B, 0x40]); // ESC @
-    await characteristic.writeValue(init);
-
-    // Write content line by line
-    const lines = content.split('\n');
-    for (const line of lines) {
-      const data = encoder.encode(line + '\n');
-      await characteristic.writeValue(data);
-    }
-
-    // Feed paper and cut
-    const feed = new Uint8Array([0x1B, 0x64, 0x03]); // ESC d 3 (feed 3 lines)
-    await characteristic.writeValue(feed);
-
-    const cut = new Uint8Array([0x1D, 0x56, 0x00]); // GS V 0 (full cut)
-    await characteristic.writeValue(cut);
-
-    server.disconnect();
+    await printToBluetoothPrinter(content, deviceId);
   } catch (error) {
     console.error("Bluetooth print error:", error);
     throw new Error("Failed to print to Bluetooth printer");
@@ -121,6 +96,9 @@ export async function printElementById(
         finalConfig = {
           paperWidth: savedConfig.paperWidth || 80,
           printerType: savedConfig.printerType || "browser",
+          deviceId: savedConfig.deviceId,
+          networkIp: savedConfig.networkIp,
+          networkPort: savedConfig.networkPort || 9100,
         };
       }
     } catch {
@@ -129,39 +107,81 @@ export async function printElementById(
     }
   }
 
-  // Try silent printing first (no dialog, no new tab)
+  // Get text content for printing
+  const content = el.innerText || el.textContent || '';
+
+  // Try Bluetooth printing first if configured
+  if (finalConfig.printerType === "bluetooth") {
+    try {
+      await printToBluetooth(finalConfig.deviceId, content);
+      console.log('✅ Printed via Bluetooth');
+      return; // Success!
+    } catch (error) {
+      console.error('Bluetooth printing failed:', error);
+      // Fall through to other methods
+    }
+  }
+
+  // Try network printing if configured
+  if (finalConfig.printerType === "network" && finalConfig.networkIp) {
+    try {
+      const printServerAvailable = await fetch('http://localhost:3001/health', {
+        method: 'GET',
+        signal: AbortSignal.timeout(1000),
+      }).then(res => res.ok).catch(() => false);
+
+      if (printServerAvailable) {
+        const response = await fetch('http://localhost:3001/print/network', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            ip: finalConfig.networkIp,
+            port: finalConfig.networkPort || 9100,
+          }),
+        });
+
+        if (response.ok) {
+          console.log(`✅ Printed to network printer ${finalConfig.networkIp}`);
+          return; // Success!
+        } else {
+          const error = await response.json();
+          console.error('Network print failed:', error);
+        }
+      }
+    } catch (error) {
+      console.log('Network printing failed, falling back to browser print:', error);
+    }
+  }
+
+  // Try serial port printing (COM7) if print server is available
   try {
     const printServerAvailable = await fetch('http://localhost:3001/health', {
       method: 'GET',
       signal: AbortSignal.timeout(1000), // 1 second timeout
     }).then(res => res.ok).catch(() => false);
 
-    if (printServerAvailable) {
-      // Get text content for silent printing
-      const content = el.innerText || el.textContent || '';
-      
-      if (content.trim()) {
-        const response = await fetch('http://localhost:3001/print/serial', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content,
-            port: 'COM7',
-            baudRate: 9600,
-          }),
-        });
+    if (printServerAvailable && finalConfig.printerType !== "network" && finalConfig.printerType !== "bluetooth") {
+      const response = await fetch('http://localhost:3001/print/serial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content,
+          port: 'COM7',
+          baudRate: 9600,
+        }),
+      });
 
-        if (response.ok) {
-          console.log('✅ Printed silently via print server');
-          return; // Success! No dialog, no new tab
-        }
+      if (response.ok) {
+        console.log('✅ Printed silently via print server');
+        return; // Success! No dialog, no new tab
       }
     }
   } catch (error) {
     console.log('Print server not available, falling back to browser print');
   }
 
-  // Fallback to browser print if silent printing failed
+  // Fallback to browser print if all else failed
   const clone = el.cloneNode(true) as HTMLElement;
   clone.style.display = "block";
   clone.style.visibility = "visible";
@@ -169,18 +189,6 @@ export async function printElementById(
 
   const paperWidth = finalConfig.paperWidth || 80;
   const title = target === "receipt" ? "Receipt" : target === "stock-report" ? "Stock Report" : "Analytics summary";
-
-  // If Bluetooth printer is configured, use it
-  if (finalConfig.printerType === "bluetooth" && finalConfig.bluetoothDevice) {
-    try {
-      const textContent = clone.innerText || clone.textContent || "";
-      await printToBluetooth(finalConfig.bluetoothDevice, textContent);
-      return;
-    } catch (error) {
-      console.error("Bluetooth print failed, falling back to browser print:", error);
-      // Fall through to browser print
-    }
-  }
 
   // Browser print - auto-trigger print dialog
   const html = buildPrintHtml(title, clone.outerHTML, paperWidth);
