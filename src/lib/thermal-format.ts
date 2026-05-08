@@ -21,13 +21,6 @@ function dashedLine(): string {
 }
 
 /**
- * Create a line of equals
- */
-function doubleLine(): string {
-  return '='.repeat(PAPER_WIDTH);
-}
-
-/**
  * Format text to fit within two columns
  */
 function twoColumns(left: string, right: string): string {
@@ -111,6 +104,9 @@ export function formatReceiptForThermal(element: HTMLElement): string {
       } else if (key.includes('date')) {
         date = value;
         console.log('Found date:', date);
+      } else if (key.includes('time')) {
+        time = value;
+        console.log('Found time:', time);
       } else if (key.includes('subtotal')) {
         subtotal = value;
         inItems = false;
@@ -127,15 +123,6 @@ export function formatReceiptForThermal(element: HTMLElement): string {
       } else if (key.includes('change')) {
         change = value;
         console.log('Found change:', change);
-      }
-    }
-    
-    // Time field (special case, might have multiple colons)
-    if (line.toLowerCase().includes('time') && !time) {
-      const match = line.match(/time[:\s]*(.*)/i);
-      if (match) {
-        time = match[1].trim();
-        console.log('Found time:', time);
       }
     }
     
@@ -190,12 +177,11 @@ export function formatReceiptForThermal(element: HTMLElement): string {
   console.log('Total:', total);
   console.log('Payment:', payment);
   
-  // Build formatted receipt
+  // Build formatted receipt - CLEAN FORMAT
   output.push(''); // Blank line at top
   output.push(centerText(businessName || 'RECEIPT'));
-  output.push('');
   output.push(centerText('OFFICIAL RECEIPT'));
-  output.push(doubleLine());
+  output.push('');
   
   // Business info
   if (username) output.push(twoColumns('Username:', username));
@@ -210,16 +196,16 @@ export function formatReceiptForThermal(element: HTMLElement): string {
     }
   }
   
-  output.push(doubleLine());
+  output.push(dashedLine());
   
   // Receipt details
   if (receiptNo) output.push(twoColumns('Receipt No:', '#' + receiptNo));
   if (date) output.push(twoColumns('Date:', date));
   if (time) output.push(twoColumns('Time:', time));
   
-  output.push(doubleLine());
-  output.push('ITEMS');
   output.push(dashedLine());
+  output.push('ITEMS');
+  output.push('');
   
   // Items
   if (items.length > 0) {
@@ -232,27 +218,25 @@ export function formatReceiptForThermal(element: HTMLElement): string {
     console.warn('WARNING: No items were parsed!');
   }
   
+  output.push('');
   output.push(dashedLine());
   
   // Totals
   if (subtotal) output.push(twoColumns('Subtotal:', subtotal));
   if (discount) output.push(discount);
   if (total) {
-    output.push(doubleLine());
+    output.push(dashedLine());
     output.push(twoColumns('TOTAL:', total));
-    output.push(doubleLine());
+    output.push(dashedLine());
   }
   if (payment) output.push(twoColumns('Payment:', payment));
   if (cashReceived) output.push(twoColumns('Cash Received:', cashReceived));
   if (change) output.push(twoColumns('Change:', change));
   
   output.push('');
-  output.push(dashedLine());
-  output.push('');
   output.push(centerText('Thank you for your business!'));
   output.push(centerText('Please come again'));
   output.push('');
-  output.push(dashedLine());
   
   const result = output.join('\n');
   console.log('=== FORMATTED OUTPUT ===');
