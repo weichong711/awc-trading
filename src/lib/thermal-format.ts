@@ -44,7 +44,13 @@ function twoColumns(left: string, right: string): string {
 export function formatReceiptForThermal(element: HTMLElement): string {
   // Get all text content
   const text = element.innerText || element.textContent || '';
+  
+  console.log('=== THERMAL FORMATTER DEBUG ===');
+  console.log('Raw text:', text);
+  
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  console.log('Parsed lines:', lines);
   
   let output: string[] = [];
   
@@ -65,70 +71,124 @@ export function formatReceiptForThermal(element: HTMLElement): string {
   let change = '';
   
   let inItems = false;
-  let currentItem: { name: string; details: string; total: string } | null = null;
+  let currentItemName = '';
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
     
-    // Business name (first line, usually)
-    if (i === 0 && !line.includes(':') && !line.includes('RECEIPT')) {
-      businessName = line;
+    console.log(`Line ${i}: "${line}"`);
+    
+    // Skip headers
+    if (line === 'OFFICIAL RECEIPT' || line === 'RECEIPT') {
       continue;
     }
     
-    // Skip "OFFICIAL RECEIPT" header
-    if (line.includes('OFFICIAL RECEIPT')) continue;
+    // Business name (usually first non-header line)
+    if (!businessName && !line.includes(':') && !line.includes('RECEIPT') && i < 5) {
+      businessName = line;
+      console.log('Found business name:', businessName);
+      continue;
+    }
     
-    // Extract fields
-    if (line.startsWith('Username:')) {
-      username = line.replace('Username:', '').trim();
-    } else if (line.startsWith('Phone Number:')) {
-      phone = line.replace('Phone Number:', '').trim();
-    } else if (line.startsWith('Email:')) {
-      email = line.replace('Email:', '').trim();
-    } else if (line.includes('Receipt No')) {
-      receiptNo = line.split(/[:#]/).pop()?.trim() || '';
-    } else if (line.startsWith('Date:')) {
-      date = line.replace('Date:', '').trim();
-    } else if (line.startsWith('Time')) {
-      time = line.replace(/^Time[:\s]*/, '').trim();
-    } else if (line === 'ITEMS' || line.includes('ITEMS')) {
-      inItems = true;
-    } else if (line.startsWith('Subtotal:')) {
-      inItems = false;
-      subtotal = line.replace('Subtotal:', '').trim();
-    } else if (line.includes('Discount')) {
-      discount = line;
-    } else if (line.startsWith('TOTAL:')) {
-      total = line.replace('TOTAL:', '').trim();
-    } else if (line.startsWith('Payment')) {
-      payment = line.replace(/^Payment[:\s]*/, '').trim();
-    } else if (line.includes('Cash Received') || line.includes('Tendered')) {
-      cashReceived = line.split(':').pop()?.trim() || '';
-    } else if (line.includes('Change:')) {
-      change = line.split(':').pop()?.trim() || '';
-    } else if (inItems && line.length > 0) {
-      // Check if this is an item detail line (contains "x RM" or "x rm")
-      if (line.includes(' x RM ') || line.includes(' x rm ')) {
-        // This is the quantity/price line
-        // Format: "1 unit x RM 25.00 RM 25.00"
-        const parts = line.split(/RM\s+/i);
-        const qtyPart = parts[0]?.trim() || '';
-        const totalPart = parts[parts.length - 1]?.trim() || '';
-        
-        if (currentItem) {
-          currentItem.details = qtyPart;
-          currentItem.total = 'RM ' + totalPart;
-          items.push(currentItem);
-          currentItem = null;
-        }
-      } else if (!line.includes('Thank you') && !line.includes('Please come')) {
-        // This is likely an item name
-        currentItem = { name: line, details: '', total: '' };
+    // Extract fields with colons
+    if (line.includes(':')) {
+      const parts = line.split(':');
+      const key = parts[0].trim().toLowerCase();
+      const value = parts.slice(1).join(':').trim();
+      
+      if (key.includes('username')) {
+        username = value;
+        console.log('Found username:', username);
+      } else if (key.includes('phone')) {
+        phone = value;
+        console.log('Found phone:', phone);
+      } else if (key.includes('email')) {
+        email = value;
+        console.log('Found email:', email);
+      } else if (key.includes('receipt')) {
+        receiptNo = value.replace('#', '');
+        console.log('Found receipt no:', receiptNo);
+      } else if (key.includes('date')) {
+        date = value;
+        console.log('Found date:', date);
+      } else if (key.includes('subtotal')) {
+        subtotal = value;
+        inItems = false;
+        console.log('Found subtotal:', subtotal);
+      } else if (key.includes('total') && !key.includes('subtotal')) {
+        total = value;
+        console.log('Found total:', total);
+      } else if (key.includes('payment')) {
+        payment = value;
+        console.log('Found payment:', payment);
+      } else if (key.includes('cash') && key.includes('received')) {
+        cashReceived = value;
+        console.log('Found cash received:', cashReceived);
+      } else if (key.includes('change')) {
+        change = value;
+        console.log('Found change:', change);
       }
     }
+    
+    // Time field (special case, might have multiple colons)
+    if (line.toLowerCase().includes('time') && !time) {
+      const match = line.match(/time[:\s]*(.*)/i);
+      if (match) {
+        time = match[1].trim();
+        console.log('Found time:', time);
+      }
+    }
+    
+    // Items section
+    if (line === 'ITEMS' || line.toLowerCase().includes('items')) {
+      inItems = true;
+      console.log('Entering ITEMS section');
+      continue;
+    }
+    
+    // Parse items
+    if (inItems) {
+      // Check if this is a quantity/price line (contains "x RM" or "x rm")
+      if (line.match(/\d+\s+\w+\s+x\s+RM\s+[\d.]+/i)) {
+        // This is the details line: "1 unit x RM 25.00 RM 25.00"
+        const match = line.match(/(.*?)\s+(RM\s+[\d.]+)$/i);
+        if (match && currentItemName) {
+          const details = match[1].trim();
+          const itemTotal = match[2].trim();
+          items.push({
+            name: currentItemName,
+            details: details,
+            total: itemTotal
+          });
+          console.log('Added item:', { name: currentItemName, details, total: itemTotal });
+          currentItemName = '';
+        }
+      } else if (!line.includes(':') && !line.includes('Thank you') && !line.includes('Please come')) {
+        // This is likely an item name
+        currentItemName = line;
+        console.log('Current item name:', currentItemName);
+      }
+    }
+    
+    // Discount
+    if (line.toLowerCase().includes('discount')) {
+      discount = line;
+      console.log('Found discount:', discount);
+    }
   }
+  
+  console.log('=== PARSED DATA ===');
+  console.log('Business:', businessName);
+  console.log('Username:', username);
+  console.log('Phone:', phone);
+  console.log('Email:', email);
+  console.log('Receipt No:', receiptNo);
+  console.log('Date:', date);
+  console.log('Time:', time);
+  console.log('Items:', items);
+  console.log('Subtotal:', subtotal);
+  console.log('Total:', total);
+  console.log('Payment:', payment);
   
   // Build formatted receipt
   output.push(''); // Blank line at top
@@ -162,13 +222,14 @@ export function formatReceiptForThermal(element: HTMLElement): string {
   output.push(dashedLine());
   
   // Items
-  for (const item of items) {
-    if (item.name) {
+  if (items.length > 0) {
+    for (const item of items) {
       output.push(item.name);
-      if (item.details && item.total) {
-        output.push(twoColumns('  ' + item.details, item.total));
-      }
+      output.push(twoColumns('  ' + item.details, item.total));
     }
+  } else {
+    output.push('(No items found)');
+    console.warn('WARNING: No items were parsed!');
   }
   
   output.push(dashedLine());
@@ -193,5 +254,10 @@ export function formatReceiptForThermal(element: HTMLElement): string {
   output.push('');
   output.push(dashedLine());
   
-  return output.join('\n');
+  const result = output.join('\n');
+  console.log('=== FORMATTED OUTPUT ===');
+  console.log(result);
+  console.log('=== END ===');
+  
+  return result;
 }
