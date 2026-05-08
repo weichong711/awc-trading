@@ -189,34 +189,68 @@ export function OrderSummary({
     createPortal(
       <div
         id="print-receipt-orders"
-        className="receipt-root print-only space-y-4 font-mono text-sm"
+        className="receipt-root print-only space-y-3 font-mono text-sm"
         aria-hidden
       >
-        <ReceiptMerchantHeader profile={businessProfile} />
+        {/* Business Header */}
+        <div className="text-center pb-2">
+          <h2 className="text-xl font-bold mb-1">{businessProfile.businessName || "AWC TRADING"}</h2>
+          <p className="text-xs mb-2">{t.orders.officialReceipt}</p>
+          {businessProfile.username && (
+            <div className="text-xs text-left">
+              <div className="flex justify-between">
+                <span>{t.settings.username}:</span>
+                <span>{businessProfile.username}</span>
+              </div>
+            </div>
+          )}
+          {businessProfile.phoneNumber && (
+            <div className="text-xs text-left">
+              <div className="flex justify-between">
+                <span>{t.settings.phoneNumber}:</span>
+                <span>{businessProfile.phoneNumber}</span>
+              </div>
+            </div>
+          )}
+          {businessProfile.email && (
+            <div className="text-xs text-left">
+              <div className="flex justify-between">
+                <span>{t.settings.email}:</span>
+                <span className="break-all">{businessProfile.email}</span>
+              </div>
+            </div>
+          )}
+        </div>
 
-        <div className="space-y-1 border-b border-dashed border-black pb-3">
-          <div className="flex justify-between">
+        {/* Separator */}
+        <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }}></div>
+
+        {/* Receipt Info */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs">
             <span>{t.orders.receiptNo}:</span>
             <span className="font-bold">#{lastOrder.id}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between text-xs">
             <span>{t.common.date}:</span>
             <span>{new Date(lastOrder.date).toLocaleDateString()}</span>
           </div>
-          <div className="flex justify-between">
-            <span>{t.orders.time}</span>
+          <div className="flex justify-between text-xs">
+            <span>{t.orders.time}:</span>
             <span>{new Date(lastOrder.date).toLocaleTimeString()}</span>
           </div>
         </div>
 
-        <div className="border-b-2 border-dashed border-black pb-3">
-          <div className="font-bold mb-2">{t.orders.itemsLabel}</div>
+        {/* Separator */}
+        <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }}></div>
+
+        {/* Items */}
+        <div>
+          <div className="font-bold mb-2 text-xs">{t.orders.itemsLabel}</div>
           {lastOrder.items.map((item, index) => (
-            <div key={index} className="mb-3">
-              <div className="flex justify-between">
-                <span>{item.productName}</span>
-              </div>
-              <div className="flex justify-between text-xs pl-2">
+            <div key={index} className="mb-2">
+              <div className="text-xs">{item.productName}</div>
+              <div className="flex justify-between text-xs">
                 <span>
                   {item.quantity} {item.unit} x RM {item.price.toFixed(2)}
                 </span>
@@ -226,50 +260,59 @@ export function OrderSummary({
           ))}
         </div>
 
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <span>{t.orders.subtotalLabel}</span>
+        {/* Separator */}
+        <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }}></div>
+
+        {/* Totals */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs">
+            <span>{t.orders.subtotalLabel}:</span>
             <span>RM {lastOrder.subtotal.toFixed(2)}</span>
           </div>
 
           {lastOrder.discount > 0 && (
-            <div className="flex justify-between text-green-600">
+            <div className="flex justify-between text-xs">
               <span>
                 {t.orders.discount}{" "}
                 {lastOrder.discountType === "percentage"
                   ? `(${lastOrder.discount}%)`
-                  : t.orders.discountFixed}
-                :
+                  : ""}:
               </span>
               <span>- RM {lastOrder.discountAmount.toFixed(2)}</span>
             </div>
           )}
 
-          <div className="flex justify-between text-base font-bold border-t-2 border-dashed border-black pt-2">
-            <span>{t.orders.totalFinal}</span>
+          <div style={{ borderTop: "2px solid #000", margin: "4px 0" }}></div>
+
+          <div className="flex justify-between font-bold">
+            <span>{t.orders.totalFinal}:</span>
             <span>RM {lastOrder.total.toFixed(2)}</span>
           </div>
+
+          <div style={{ borderTop: "2px solid #000", margin: "4px 0" }}></div>
+
           {lastOrder.paymentMethod && (
-            <div className="flex justify-between">
-              <span>{t.orders.payment}</span>
-              <span className="font-medium">{lastOrder.paymentMethod === "qr" ? t.orders.paymentQr : lastOrder.paymentMethod === "card" ? t.orders.paymentCard : t.orders.paymentCash}</span>
+            <div className="flex justify-between text-xs">
+              <span>{t.orders.payment}:</span>
+              <span>{lastOrder.paymentMethod === "qr" ? t.orders.paymentQr : lastOrder.paymentMethod === "card" ? t.orders.paymentCard : t.orders.paymentCash}</span>
             </div>
           )}
           {lastOrder.cashTendered != null && lastOrder.cashTendered > 0 && (
             <>
-              <div className="flex justify-between">
-                <span>{t.orders.cashReceived}</span>
+              <div className="flex justify-between text-xs">
+                <span>{t.orders.cashReceived}:</span>
                 <span>RM {lastOrder.cashTendered.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between font-bold">
-                <span>{t.orders.change}</span>
+              <div className="flex justify-between text-xs font-bold">
+                <span>{t.orders.change}:</span>
                 <span>RM {(lastOrder.cashTendered - lastOrder.total).toFixed(2)}</span>
               </div>
             </>
           )}
         </div>
 
-        <div className="receipt-footer text-center text-xs border-t border-dashed border-black pt-3">
+        {/* Footer */}
+        <div className="text-center text-xs" style={{ marginTop: "12px" }}>
           <p>{t.orders.thankYou}</p>
           <p className="mt-1">{t.orders.comeAgain}</p>
         </div>
@@ -626,32 +669,66 @@ export function OrderSummary({
           </DialogHeader>
 
           {lastOrder && (
-            <div className="space-y-4 font-mono text-sm">
-              <ReceiptMerchantHeader profile={businessProfile} />
+            <div className="space-y-3 font-mono text-sm">
+              {/* Business Header */}
+              <div className="text-center pb-2">
+                <h2 className="text-xl font-bold mb-1">{businessProfile.businessName || "AWC TRADING"}</h2>
+                <p className="text-xs mb-2">{t.orders.officialReceipt}</p>
+                {businessProfile.username && (
+                  <div className="text-xs text-left">
+                    <div className="flex justify-between">
+                      <span>{t.settings.username}:</span>
+                      <span>{businessProfile.username}</span>
+                    </div>
+                  </div>
+                )}
+                {businessProfile.phoneNumber && (
+                  <div className="text-xs text-left">
+                    <div className="flex justify-between">
+                      <span>{t.settings.phoneNumber}:</span>
+                      <span>{businessProfile.phoneNumber}</span>
+                    </div>
+                  </div>
+                )}
+                {businessProfile.email && (
+                  <div className="text-xs text-left">
+                    <div className="flex justify-between">
+                      <span>{t.settings.email}:</span>
+                      <span className="break-all">{businessProfile.email}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-              <div className="space-y-1 border-b border-dashed pb-3">
-                <div className="flex justify-between">
+              {/* Separator */}
+              <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }}></div>
+
+              {/* Receipt Info */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
                   <span>{t.orders.receiptNo}:</span>
                   <span className="font-bold">#{lastOrder.id}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-xs">
                   <span>{t.common.date}:</span>
                   <span>{new Date(lastOrder.date).toLocaleDateString()}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>{t.orders.time}</span>
+                <div className="flex justify-between text-xs">
+                  <span>{t.orders.time}:</span>
                   <span>{new Date(lastOrder.date).toLocaleTimeString()}</span>
                 </div>
               </div>
 
-              <div className="border-b-2 border-dashed pb-3">
-                <div className="font-bold mb-2">{t.orders.itemsLabel}</div>
+              {/* Separator */}
+              <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }}></div>
+
+              {/* Items */}
+              <div>
+                <div className="font-bold mb-2 text-xs">{t.orders.itemsLabel}</div>
                 {lastOrder.items.map((item, index) => (
-                  <div key={index} className="mb-3">
-                    <div className="flex justify-between">
-                      <span>{item.productName}</span>
-                    </div>
-                    <div className="flex justify-between text-xs pl-2">
+                  <div key={index} className="mb-2">
+                    <div className="text-xs">{item.productName}</div>
+                    <div className="flex justify-between text-xs">
                       <span>
                         {item.quantity} {item.unit} x RM {item.price.toFixed(2)}
                       </span>
@@ -661,48 +738,54 @@ export function OrderSummary({
                 ))}
               </div>
 
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>{t.orders.subtotalLabel}</span>
+              {/* Separator */}
+              <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }}></div>
+
+              {/* Totals */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span>{t.orders.subtotalLabel}:</span>
                   <span>RM {lastOrder.subtotal.toFixed(2)}</span>
                 </div>
                 {lastOrder.discount > 0 && (
-                  <div className="flex justify-between text-green-600">
+                  <div className="flex justify-between text-xs">
                     <span>
                       {t.orders.discount}{" "}
                       {lastOrder.discountType === "percentage"
                         ? `(${lastOrder.discount}%)`
-                        : t.orders.discountFixed}
-                      :
+                        : ""}:
                     </span>
                     <span>- RM {lastOrder.discountAmount.toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-base font-bold border-t-2 border-dashed pt-2">
-                  <span>{t.orders.totalFinal}</span>
+                <div style={{ borderTop: "2px solid #000", margin: "4px 0" }}></div>
+                <div className="flex justify-between font-bold">
+                  <span>{t.orders.totalFinal}:</span>
                   <span>RM {lastOrder.total.toFixed(2)}</span>
                 </div>
+                <div style={{ borderTop: "2px solid #000", margin: "4px 0" }}></div>
                 {lastOrder.paymentMethod && (
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>{t.orders.payment}</span>
-                    <span className="capitalize font-medium">{lastOrder.paymentMethod === "qr" ? t.orders.paymentQr : lastOrder.paymentMethod === "card" ? t.orders.paymentCard : t.orders.paymentCash}</span>
+                  <div className="flex justify-between text-xs">
+                    <span>{t.orders.payment}:</span>
+                    <span className="capitalize">{lastOrder.paymentMethod === "qr" ? t.orders.paymentQr : lastOrder.paymentMethod === "card" ? t.orders.paymentCard : t.orders.paymentCash}</span>
                   </div>
                 )}
                 {lastOrder.cashTendered != null && lastOrder.cashTendered > 0 && (
                   <>
-                    <div className="flex justify-between text-sm">
-                      <span>{t.orders.cashReceived}</span>
+                    <div className="flex justify-between text-xs">
+                      <span>{t.orders.cashReceived}:</span>
                       <span>RM {lastOrder.cashTendered.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-sm font-bold text-blue-600">
-                      <span>{t.orders.change}</span>
+                    <div className="flex justify-between text-xs font-bold">
+                      <span>{t.orders.change}:</span>
                       <span>RM {(lastOrder.cashTendered - lastOrder.total).toFixed(2)}</span>
                     </div>
                   </>
                 )}
               </div>
 
-              <div className="text-center text-xs border-t border-dashed pt-3">
+              {/* Footer */}
+              <div className="text-center text-xs" style={{ marginTop: "12px" }}>
                 <p>{t.orders.thankYou}</p>
                 <p className="mt-1">{t.orders.comeAgain}</p>
               </div>
