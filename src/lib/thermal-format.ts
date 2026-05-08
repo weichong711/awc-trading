@@ -31,128 +31,52 @@ function twoColumns(left: string, right: string): string {
 }
 
 /**
+ * Extract text content safely
+ */
+function getTextContent(selector: string, parent: HTMLElement): string {
+  const el = parent.querySelector(selector);
+  return el?.textContent?.trim() || '';
+}
+
+/**
  * Format receipt for thermal printer
  * Takes HTML element and returns formatted plain text
  */
 export function formatReceiptForThermal(element: HTMLElement): string {
   const output: string[] = [];
   
-  // Parse the receipt structure by looking at the actual DOM
   try {
-    // Get business name (first h2 or text-xl element)
-    const businessNameEl = element.querySelector('h2, .text-xl');
-    const businessName = businessNameEl?.textContent?.trim() || 'RECEIPT';
+    // Get the receipt element - it should have id="print-receipt-orders"
+    const receiptEl = element.querySelector('#print-receipt-orders') || element;
     
-    // Get all text content organized by sections
-    const allDivs = element.querySelectorAll('div');
+    // Extract business info from the first section
+    const businessName = getTextContent('h2, .text-xl', receiptEl) || 'RECEIPT';
+    const username = extractLabelValue(receiptEl, 'Username');
+    const phone = extractLabelValue(receiptEl, 'Phone');
+    const email = extractLabelValue(receiptEl, 'Email');
     
-    let receiptNo = '';
-    let date = '';
-    let time = '';
-    let username = '';
-    let phone = '';
-    let email = '';
-    let items: Array<{ name: string; qty: string; price: string; total: string }> = [];
-    let subtotal = '';
-    let discount = '';
-    let total = '';
-    let payment = '';
-    let cashReceived = '';
-    let change = '';
+    // Extract receipt info
+    const receiptNo = extractLabelValue(receiptEl, 'Receipt No');
+    const date = extractLabelValue(receiptEl, 'Date');
+    const time = extractLabelValue(receiptEl, 'Time');
     
-    // Parse each div for data
-    allDivs.forEach((div) => {
-      const text = div.textContent?.trim() || '';
-      
-      // Receipt info
-      if (text.includes('Receipt No:') || text.includes('receiptNo')) {
-        const match = text.match(/#?(\d+)/);
-        if (match) receiptNo = match[1];
-      }
-      if (text.includes('Date:') && !date) {
-        const match = text.match(/Date:\s*(.+)/);
-        if (match) date = match[1].trim();
-      }
-      if (text.includes('Time:') && !time) {
-        const match = text.match(/Time:\s*(.+)/);
-        if (match) time = match[1].trim();
-      }
-      
-      // Business info
-      if (text.includes('Username:') && !username) {
-        const match = text.match(/Username:\s*(.+)/);
-        if (match) username = match[1].trim();
-      }
-      if (text.includes('Phone') && !phone) {
-        const match = text.match(/Phone[^:]*:\s*(.+)/);
-        if (match) phone = match[1].trim();
-      }
-      if (text.includes('Email:') && !email) {
-        const match = text.match(/Email:\s*(.+)/);
-        if (match) email = match[1].trim();
-      }
-      
-      // Totals
-      if (text.includes('Subtotal:') && !subtotal) {
-        const match = text.match(/RM\s*([\d.]+)/);
-        if (match) subtotal = match[1];
-      }
-      if (text.includes('TOTAL:') && !total) {
-        const match = text.match(/RM\s*([\d.]+)/);
-        if (match) total = match[1];
-      }
-      if (text.includes('Payment:') && !payment) {
-        const match = text.match(/Payment:\s*(.+)/);
-        if (match) payment = match[1].trim();
-      }
-      if (text.includes('Cash Received:') && !cashReceived) {
-        const match = text.match(/RM\s*([\d.]+)/);
-        if (match) cashReceived = match[1];
-      }
-      if (text.includes('Change:') && !change) {
-        const match = text.match(/RM\s*([\d.]+)/);
-        if (match) change = match[1];
-      }
-      if (text.includes('Discount') && !discount) {
-        const match = text.match(/RM\s*([\d.]+)/);
-        if (match) discount = match[1];
-      }
-    });
+    // Extract items
+    const items = extractItems(receiptEl);
     
-    // Parse items - look for item structure
-    const itemDivs = element.querySelectorAll('div[class*="mb-2"]');
-    itemDivs.forEach((itemDiv) => {
-      const itemText = itemDiv.textContent || '';
-      
-      // Check if this looks like an item (has "x RM" pattern)
-      if (itemText.includes(' x RM ')) {
-        const lines = itemText.split('\n').map(l => l.trim()).filter(l => l);
-        
-        if (lines.length >= 2) {
-          const itemName = lines[0];
-          const detailLine = lines[1];
-          
-          // Parse: "1 unit x RM 25.00 RM 25.00"
-          const match = detailLine.match(/(\d+(?:\.\d+)?)\s+(\w+)\s+x\s+RM\s+([\d.]+)\s+RM\s+([\d.]+)/);
-          if (match) {
-            items.push({
-              name: itemName,
-              qty: match[1],
-              price: match[3],
-              total: match[4]
-            });
-          }
-        }
-      }
-    });
+    // Extract totals
+    const subtotal = extractLabelValue(receiptEl, 'Subtotal');
+    const discount = extractLabelValue(receiptEl, 'Discount');
+    const total = extractLabelValue(receiptEl, 'TOTAL');
+    const payment = extractLabelValue(receiptEl, 'Payment');
+    const cashReceived = extractLabelValue(receiptEl, 'Cash Received');
+    const change = extractLabelValue(receiptEl, 'Change');
     
-    // Build the formatted receipt
-    output.push(''); // Blank line at top
+    // Build the receipt
+    output.push('');
     output.push(centerText(businessName));
     output.push(centerText('OFFICIAL RECEIPT'));
     output.push('');
     
-    // Business info
     if (username) output.push(twoColumns('Username:', username));
     if (phone) output.push(twoColumns('Phone Number:', phone));
     if (email) {
@@ -166,8 +90,7 @@ export function formatReceiptForThermal(element: HTMLElement): string {
     
     output.push(dashedLine());
     
-    // Receipt details
-    if (receiptNo) output.push(twoColumns('Receipt No:', '#' + receiptNo));
+    if (receiptNo) output.push(twoColumns('Receipt No:', receiptNo));
     if (date) output.push(twoColumns('Date:', date));
     if (time) output.push(twoColumns('Time:', time));
     
@@ -175,12 +98,10 @@ export function formatReceiptForThermal(element: HTMLElement): string {
     output.push('ITEMS');
     output.push('');
     
-    // Items
     if (items.length > 0) {
       for (const item of items) {
         output.push(item.name);
-        const details = `${item.qty} unit x RM ${item.price}`;
-        output.push(twoColumns('  ' + details, 'RM ' + item.total));
+        output.push(twoColumns('  ' + item.details, item.total));
       }
     } else {
       output.push('(No items)');
@@ -189,17 +110,16 @@ export function formatReceiptForThermal(element: HTMLElement): string {
     output.push('');
     output.push(dashedLine());
     
-    // Totals
-    if (subtotal) output.push(twoColumns('Subtotal:', 'RM ' + subtotal));
-    if (discount) output.push(twoColumns('Discount:', '- RM ' + discount));
+    if (subtotal) output.push(twoColumns('Subtotal:', subtotal));
+    if (discount) output.push(twoColumns('Discount:', discount));
     if (total) {
       output.push(dashedLine());
-      output.push(twoColumns('TOTAL:', 'RM ' + total));
+      output.push(twoColumns('TOTAL:', total));
       output.push(dashedLine());
     }
     if (payment) output.push(twoColumns('Payment:', payment));
-    if (cashReceived) output.push(twoColumns('Cash Received:', 'RM ' + cashReceived));
-    if (change) output.push(twoColumns('Change:', 'RM ' + change));
+    if (cashReceived) output.push(twoColumns('Cash Received:', cashReceived));
+    if (change) output.push(twoColumns('Change:', change));
     
     output.push('');
     output.push(centerText('Thank you for your business!'));
@@ -208,14 +128,80 @@ export function formatReceiptForThermal(element: HTMLElement): string {
     
   } catch (error) {
     console.error('Error formatting receipt:', error);
-    // Fallback to simple text extraction
-    output.push(element.innerText || element.textContent || 'Receipt');
+    output.push('Error formatting receipt');
   }
   
-  const result = output.join('\n');
-  console.log('=== FORMATTED RECEIPT ===');
-  console.log(result);
-  console.log('=== END ===');
+  return output.join('\n');
+}
+
+/**
+ * Extract value for a label from the receipt
+ */
+function extractLabelValue(element: HTMLElement, label: string): string {
+  // Find all divs with flex justify-between (our label-value pairs)
+  const pairs = element.querySelectorAll('div.flex.justify-between');
   
-  return result;
+  for (const pair of pairs) {
+    const text = pair.textContent || '';
+    if (text.includes(label + ':')) {
+      // Extract the value after the colon
+      const parts = text.split(':');
+      if (parts.length >= 2) {
+        return parts.slice(1).join(':').trim();
+      }
+    }
+  }
+  
+  return '';
+}
+
+/**
+ * Extract items from the receipt
+ */
+function extractItems(element: HTMLElement): Array<{ name: string; details: string; total: string }> {
+  const items: Array<{ name: string; details: string; total: string }> = [];
+  
+  // Find the items section
+  const allDivs = Array.from(element.querySelectorAll('div'));
+  
+  let inItemsSection = false;
+  let currentItemName = '';
+  
+  for (const div of allDivs) {
+    const text = (div.textContent || '').trim();
+    
+    // Check if we're entering the items section
+    if (text === 'ITEMS' || text.startsWith('ITEMS')) {
+      inItemsSection = true;
+      continue;
+    }
+    
+    // Check if we're leaving the items section
+    if (inItemsSection && (text.includes('Subtotal') || text.includes('TOTAL'))) {
+      break;
+    }
+    
+    if (inItemsSection) {
+      // Check if this div has the item structure
+      const hasQuantity = text.match(/(\d+(?:\.\d+)?)\s+(\w+)\s+x\s+RM\s+([\d.]+)/);
+      
+      if (hasQuantity && currentItemName) {
+        // This is the details line
+        const match = text.match(/(\d+(?:\.\d+)?)\s+(\w+)\s+x\s+RM\s+([\d.]+)\s+RM\s+([\d.]+)/);
+        if (match) {
+          items.push({
+            name: currentItemName,
+            details: `${match[1]} ${match[2]} x RM ${match[3]}`,
+            total: `RM ${match[4]}`
+          });
+          currentItemName = '';
+        }
+      } else if (!text.includes(':') && !text.includes('RM') && text.length > 0 && text.length < 50) {
+        // This might be an item name
+        currentItemName = text;
+      }
+    }
+  }
+  
+  return items;
 }
