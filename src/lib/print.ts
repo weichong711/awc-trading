@@ -2,6 +2,7 @@
 import printFrameCss from "../styles/print-frame.css?raw";
 import { printToBluetoothPrinter, getSavedBluetoothDevice } from "./bluetooth-print";
 import { formatReceiptForThermal } from "./thermal-format";
+import { toast } from "sonner";
 
 export type PrintTarget = "receipt" | "analytics" | "stock-report";
 
@@ -119,18 +120,22 @@ export async function printElementById(
   // Try Bluetooth printing first if configured
   if (finalConfig.printerType === "bluetooth") {
     try {
+      toast.loading("Printing via Bluetooth...", { id: "print-status" });
       await printToBluetooth(finalConfig.deviceId, thermalContent);
+      toast.success("✅ Printed successfully via Bluetooth", { id: "print-status" });
       console.log('✅ Printed via Bluetooth');
       return; // Success!
     } catch (error) {
       console.error('Bluetooth printing failed:', error);
-      // Fall through to other methods
+      toast.error("Bluetooth printing failed. Check printer connection.", { id: "print-status" });
+      return;
     }
   }
 
   // Try network printing if configured
   if (finalConfig.printerType === "network" && finalConfig.networkIp) {
     try {
+      toast.loading("Printing to network printer...", { id: "print-status" });
       const printServerAvailable = await fetch('http://localhost:3001/health', {
         method: 'GET',
         signal: AbortSignal.timeout(1000),
@@ -148,20 +153,29 @@ export async function printElementById(
         });
 
         if (response.ok) {
+          toast.success(`✅ Printed to ${finalConfig.networkIp}`, { id: "print-status" });
           console.log(`✅ Printed to network printer ${finalConfig.networkIp}`);
           return; // Success!
         } else {
           const error = await response.json();
           console.error('Network print failed:', error);
+          toast.error("Network printing failed", { id: "print-status" });
+          return;
         }
+      } else {
+        toast.error("Print server not running", { id: "print-status" });
+        return;
       }
     } catch (error) {
-      console.log('Network printing failed, falling back to browser print:', error);
+      console.log('Network printing failed:', error);
+      toast.error("Network printing failed", { id: "print-status" });
+      return;
     }
   }
 
   // Try serial port printing (COM7) if print server is available
   try {
+    toast.loading("Printing to thermal printer...", { id: "print-status" });
     const printServerAvailable = await fetch('http://localhost:3001/health', {
       method: 'GET',
       signal: AbortSignal.timeout(1000), // 1 second timeout
@@ -179,130 +193,151 @@ export async function printElementById(
       });
 
       if (response.ok) {
+        toast.success("✅ Receipt printed successfully!", { id: "print-status" });
         console.log('✅ Printed silently via print server');
         return; // Success! No dialog, no new tab
+      } else {
+        console.error('Print server returned error');
+        toast.error("Printing failed. Check printer connection.", { id: "print-status" });
+        return;
       }
+    } else {
+      toast.error("Print server not running. Start it with: npm run print-server", { 
+        id: "print-status",
+        duration: 5000 
+      });
+      return;
     }
   } catch (error) {
-    console.log('Print server not available, falling back to browser print');
+    console.log('Print server not available or failed:', error);
+    toast.error("Cannot connect to print server. Make sure it's running.", { 
+      id: "print-status",
+      duration: 5000 
+    });
+    return;
   }
 
-  // Fallback to browser print if all else failed
-  const clone = el.cloneNode(true) as HTMLElement;
-  clone.style.display = "block";
-  clone.style.visibility = "visible";
-  clone.removeAttribute("hidden");
-
-  const paperWidth = finalConfig.paperWidth || 80;
-  const title = target === "receipt" ? "Receipt" : target === "stock-report" ? "Stock Report" : "Analytics summary";
-
-  // Browser print - auto-trigger print dialog
-  const html = buildPrintHtml(title, clone.outerHTML, paperWidth);
-
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const blobUrl = URL.createObjectURL(blob);
-
-  const w = window.open(blobUrl, "_blank");
-  if (w) {
-    // Set onload handler immediately
-    w.onload = () => {
-      setTimeout(() => {
-        printWhenReady(w);
-      }, 250);
-    };
+  // If we reach here and no printer type is configured, show error
+  if (!finalConfig.printerType || finalConfig.printerType === "browser") {
+    console.warn('No direct printer configured, falling back to browser print');
     
-    const revoke = () => {
-      try {
-        URL.revokeObjectURL(blobUrl);
-      } catch {
-        // ignore
-      }
-    };
+    // Fallback to browser print only if explicitly set to "browser" mode
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.style.display = "block";
+    clone.style.visibility = "visible";
+    clone.removeAttribute("hidden");
 
-    const cleanup = () => {
-      revoke();
-      try {
-        w.close();
-      } catch {
-        // ignore
-      }
-    };
+    const paperWidth = finalConfig.paperWidth || 80;
+    const title = target === "receipt" ? "Receipt" : target === "stock-report" ? "Stock Report" : "Analytics summary";
 
-    w.addEventListener("afterprint", () => cleanup(), { once: true });
-    
-    // Also cleanup if window is closed manually
-    const checkClosed = setInterval(() => {
-      if (w.closed) {
+    // Browser print - auto-trigger print dialog
+    const html = buildPrintHtml(title, clone.outerHTML, paperWidth);
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const w = window.open(blobUrl, "_blank");
+    if (w) {
+      // Set onload handler immediately
+      w.onload = () => {
+        setTimeout(() => {
+          printWhenReady(w);
+        }, 250);
+      };
+      
+      const revoke = () => {
+        try {
+          URL.revokeObjectURL(blobUrl);
+        } catch {
+          // ignore
+        }
+      };
+
+      const cleanup = () => {
+        revoke();
+        try {
+          w.close();
+        } catch {
+          // ignore
+        }
+      };
+
+      w.addEventListener("afterprint", () => cleanup(), { once: true });
+      
+      // Also cleanup if window is closed manually
+      const checkClosed = setInterval(() => {
+        if (w.closed) {
+          clearInterval(checkClosed);
+          revoke();
+        }
+      }, 1000);
+      
+      window.setTimeout(() => {
         clearInterval(checkClosed);
-        revoke();
-      }
-    }, 1000);
-    
-    window.setTimeout(() => {
-      clearInterval(checkClosed);
-      if (!w.closed) {
-        revoke();
-      }
-    }, 60_000);
+        if (!w.closed) {
+          revoke();
+        }
+      }, 60_000);
 
-    const startPrint = () => {
-      // Wait a bit for content to render, then trigger print
-      setTimeout(() => {
-        printWhenReady(w);
-      }, 250); // Small delay to ensure content is rendered
-    };
+      const startPrint = () => {
+        // Wait a bit for content to render, then trigger print
+        setTimeout(() => {
+          printWhenReady(w);
+        }, 250); // Small delay to ensure content is rendered
+      };
 
-    // Try to print as soon as possible
-    if (w.document.readyState === "complete") {
-      startPrint();
-    } else {
-      w.addEventListener("load", startPrint, { once: true });
-      // Fallback: also try after DOMContentLoaded
-      w.addEventListener("DOMContentLoaded", startPrint, { once: true });
+      // Try to print as soon as possible
+      if (w.document.readyState === "complete") {
+        startPrint();
+      } else {
+        w.addEventListener("load", startPrint, { once: true });
+        // Fallback: also try after DOMContentLoaded
+        w.addEventListener("DOMContentLoaded", startPrint, { once: true });
+      }
+
+      return;
     }
 
-    return;
-  }
+    URL.revokeObjectURL(blobUrl);
 
-  URL.revokeObjectURL(blobUrl);
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.setAttribute(
+      "title",
+      target === "receipt" ? "Print receipt" : target === "stock-report" ? "Print stock report" : "Print summary",
+    );
+    iframe.style.cssText =
+      "position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;z-index:-1";
+    document.body.appendChild(iframe);
 
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("aria-hidden", "true");
-  iframe.setAttribute(
-    "title",
-    target === "receipt" ? "Print receipt" : target === "stock-report" ? "Print stock report" : "Print summary",
-  );
-  iframe.style.cssText =
-    "position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;z-index:-1";
-  document.body.appendChild(iframe);
+    const frameWin = iframe.contentWindow;
+    const frameDoc = iframe.contentDocument;
+    if (!frameWin || !frameDoc) {
+      iframe.remove();
+      return;
+    }
 
-  const frameWin = iframe.contentWindow;
-  const frameDoc = iframe.contentDocument;
-  if (!frameWin || !frameDoc) {
-    iframe.remove();
-    return;
-  }
+    frameDoc.open();
+    frameDoc.write(html);
+    frameDoc.close();
 
-  frameDoc.open();
-  frameDoc.write(html);
-  frameDoc.close();
+    frameDoc.body.getBoundingClientRect();
 
-  frameDoc.body.getBoundingClientRect();
+    const cleanup = () => {
+      frameWin.removeEventListener("afterprint", cleanup);
+      iframe.remove();
+    };
+    frameWin.addEventListener("afterprint", cleanup, { once: true });
+    window.setTimeout(() => {
+      if (iframe.parentNode) iframe.remove();
+    }, 8000);
 
-  const cleanup = () => {
-    frameWin.removeEventListener("afterprint", cleanup);
-    iframe.remove();
-  };
-  frameWin.addEventListener("afterprint", cleanup, { once: true });
-  window.setTimeout(() => {
-    if (iframe.parentNode) iframe.remove();
-  }, 8000);
-
-  if (frameDoc.readyState === "complete") {
-    printWhenReady(frameWin);
-  } else {
-    frameWin.addEventListener("load", () => printWhenReady(frameWin), {
-      once: true,
-    });
+    if (frameDoc.readyState === "complete") {
+      printWhenReady(frameWin);
+    } else {
+      frameWin.addEventListener("load", () => printWhenReady(frameWin), {
+        once: true,
+      });
+    }
   }
 }
