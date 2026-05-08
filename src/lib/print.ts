@@ -99,28 +99,47 @@ async function printToBluetooth(device: BluetoothDevice, content: string): Promi
  *   to the opener, so `document.write` never runs and the user only sees `about:blank`.
  * - Fallback: hidden iframe print.
  * - Supports custom paper width and Bluetooth printing.
+ * - Auto-loads printer config from localStorage if not provided.
  */
 export async function printElementById(
   id: string, 
   target: PrintTarget, 
-  config: PrintConfig = {}
+  config?: PrintConfig
 ): Promise<void> {
   const el = document.getElementById(id);
   if (!el) return;
+
+  // Load printer config from localStorage if not provided
+  let finalConfig = config || {};
+  if (!config) {
+    try {
+      const saved = localStorage.getItem("printerConfig");
+      if (saved) {
+        const savedConfig = JSON.parse(saved);
+        finalConfig = {
+          paperWidth: savedConfig.paperWidth || 80,
+          printerType: savedConfig.printerType || "browser",
+        };
+      }
+    } catch {
+      // Use defaults
+      finalConfig = { paperWidth: 80, printerType: "browser" };
+    }
+  }
 
   const clone = el.cloneNode(true) as HTMLElement;
   clone.style.display = "block";
   clone.style.visibility = "visible";
   clone.removeAttribute("hidden");
 
-  const paperWidth = config.paperWidth || 80;
+  const paperWidth = finalConfig.paperWidth || 80;
   const title = target === "receipt" ? "Receipt" : target === "stock-report" ? "Stock Report" : "Analytics summary";
 
   // If Bluetooth printer is configured, use it
-  if (config.printerType === "bluetooth" && config.bluetoothDevice) {
+  if (finalConfig.printerType === "bluetooth" && finalConfig.bluetoothDevice) {
     try {
       const textContent = clone.innerText || clone.textContent || "";
-      await printToBluetooth(config.bluetoothDevice, textContent);
+      await printToBluetooth(finalConfig.bluetoothDevice, textContent);
       return;
     } catch (error) {
       console.error("Bluetooth print failed, falling back to browser print:", error);
@@ -128,7 +147,7 @@ export async function printElementById(
     }
   }
 
-  // Browser print
+  // Browser print - auto-trigger print dialog
   const html = buildPrintHtml(title, clone.outerHTML, paperWidth);
 
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
