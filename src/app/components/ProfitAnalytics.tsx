@@ -840,7 +840,7 @@ export function ProfitAnalytics({
           </DialogHeader>
 
           {/* Printable block */}
-          <div id="print-analytics" className="print-only space-y-3 font-mono text-sm">
+          <div id="print-analytics" className="receipt-root print-only space-y-3 font-mono text-sm">
             <ReceiptMerchantHeader
               profile={businessProfile}
               subtitle="ANALYTICS SUMMARY"
@@ -886,7 +886,7 @@ export function ProfitAnalytics({
               </div>
             </div>
 
-            <div className="text-center text-xs border-t border-dashed pt-3">
+            <div className="receipt-footer text-center text-xs border-t border-dashed pt-3">
               <p>— End —</p>
             </div>
           </div>
@@ -928,7 +928,7 @@ export function ProfitAnalytics({
           {selectedOrder && (
             <div
               id="print-receipt-analytics"
-              className="print-only space-y-4 font-mono text-sm"
+              className="receipt-root print-only space-y-4 font-mono text-sm"
             >
               <ReceiptMerchantHeader profile={businessProfile} />
 
@@ -1007,7 +1007,7 @@ export function ProfitAnalytics({
                 )}
               </div>
 
-              <div className="text-center text-xs border-t border-dashed pt-3">
+              <div className="receipt-footer text-center text-xs border-t border-dashed pt-3">
                 <p>{t.orders.thankYou}</p>
                 <p className="mt-1">{t.orders.comeAgain}</p>
               </div>
