@@ -4,9 +4,6 @@
 const express = require('express');
 const cors = require('cors');
 const { SerialPort } = require('serialport');
-const escpos = require('escpos');
-escpos.USB = require('escpos-usb');
-escpos.Serial = require('escpos-serialport');
 
 const app = express();
 const PORT = 3001;
@@ -36,52 +33,42 @@ app.post('/print/serial', async (req, res) => {
       baudRate: baudRate,
     });
 
-    // Create ESC/POS device
-    const device = new escpos.Serial(serialPort);
-    const printer = new escpos.Printer(device);
+    // Wait for port to open
+    serialPort.on('open', () => {
+      // Send content to printer
+      serialPort.write(content, (err) => {
+        if (err) {
+          console.error('Write error:', err);
+          return res.status(500).json({ 
+            error: 'Print failed', 
+            message: err.message 
+          });
+        }
 
-    // Open connection and print
-    device.open(() => {
-      printer
-        .font('a')
-        .align('ct')
-        .style('bu')
-        .size(1, 1)
-        .text(content)
-        .feed(6)  // Feed 6 lines for easy tearing (longer tail)
-        .cut()
-        .close(() => {
+        // Add paper feed (6 lines for easy tearing)
+        serialPort.write('\n\n\n\n\n\n', (err) => {
+          if (err) {
+            console.error('Feed error:', err);
+          }
+
+          // Close port
+          serialPort.close();
+          
           res.json({ 
             success: true, 
             message: 'Printed successfully to ' + port 
           });
         });
+      });
     });
 
-  } catch (error) {
-    console.error('Print error:', error);
-    res.status(500).json({ 
-      error: 'Print failed', 
-      message: error.message 
-    });
-  }
-});
-
-// Print to Bluetooth printer
-app.post('/print/bluetooth', async (req, res) => {
-  try {
-    const { content } = req.body;
-    
-    if (!content) {
-      return res.status(400).json({ error: 'No content provided' });
-    }
-
-    // For Bluetooth, you'll need to pair the printer first
-    // Then use the Bluetooth serial port (e.g., COM7 if it's mapped)
-    
-    res.json({ 
-      success: true, 
-      message: 'Bluetooth printing not yet implemented. Use serial port instead.' 
+    // Handle errors
+    serialPort.on('error', (err) => {
+      console.error('Serial port error:', err);
+      res.status(500).json({ 
+        error: 'Print failed', 
+        message: err.message 
+      });
     });
 
   } catch (error) {
@@ -111,23 +98,31 @@ app.post('/print/html', async (req, res) => {
       baudRate: 9600,
     });
 
-    const device = new escpos.Serial(serialPort);
-    const printer = new escpos.Printer(device);
+    serialPort.on('open', () => {
+      serialPort.write(text, (err) => {
+        if (err) {
+          return res.status(500).json({ 
+            error: 'Print failed', 
+            message: err.message 
+          });
+        }
 
-    device.open(() => {
-      printer
-        .font('a')
-        .align('lt')
-        .size(0, 0)
-        .text(text)
-        .feed(6)  // Feed 6 lines for easy tearing (longer tail)
-        .cut()
-        .close(() => {
+        // Add paper feed
+        serialPort.write('\n\n\n\n\n\n', () => {
+          serialPort.close();
           res.json({ 
             success: true, 
             message: 'Printed successfully' 
           });
         });
+      });
+    });
+
+    serialPort.on('error', (err) => {
+      res.status(500).json({ 
+        error: 'Print failed', 
+        message: err.message 
+      });
     });
 
   } catch (error) {
