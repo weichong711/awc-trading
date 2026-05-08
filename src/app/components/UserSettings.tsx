@@ -109,25 +109,26 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
         ],
       });
 
+      // Store device for future use
       setBluetoothDevice(device);
       setPrinterType("bluetooth");
       
-      // Save to localStorage
+      // Save to localStorage with device ID so we can reconnect automatically
       localStorage.setItem("printerConfig", JSON.stringify({
         paperWidth: parseInt(paperWidth),
         printerType: "bluetooth",
         deviceId: device.id,
-        deviceName: device.name,
+        deviceName: device.name || "Bluetooth Printer",
       }));
       
-      setPrinterSuccess(`✓ Connected to ${device.name || "Bluetooth Printer"}`);
+      setPrinterSuccess(`✓ Connected to ${device.name || "Bluetooth Printer"}. Now printing will be automatic!`);
       setPrinterError("");
     } catch (err) {
       if (err instanceof Error) {
         if (err.name === "NotFoundError") {
           setPrinterError("No Bluetooth printer found. Make sure your printer is turned on and in pairing mode.");
         } else if (err.name === "NotAllowedError") {
-          setPrinterError("Bluetooth access was denied.");
+          setPrinterError("Bluetooth access was denied. Please allow Bluetooth access.");
         } else {
           setPrinterError(`Failed to connect: ${err.message}`);
         }
