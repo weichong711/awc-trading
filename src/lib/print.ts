@@ -36,20 +36,24 @@ body {
 }
 
 function printWhenReady(win: Window) {
-  try {
-    win.focus();
-  } catch {
-    // ignore
-  }
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      try {
-        win.print();
-      } catch {
-        // ignore
-      }
-    });
-  });
+  // Multiple attempts to ensure print dialog opens
+  const attemptPrint = () => {
+    try {
+      win.focus();
+      win.print();
+    } catch (e) {
+      console.error("Print attempt failed:", e);
+    }
+  };
+
+  // Try immediately
+  attemptPrint();
+
+  // Try again after a short delay (for slower browsers)
+  setTimeout(() => attemptPrint(), 100);
+  
+  // Final attempt after content is fully loaded
+  setTimeout(() => attemptPrint(), 500);
 }
 
 /**
@@ -155,6 +159,13 @@ export async function printElementById(
 
   const w = window.open(blobUrl, "_blank");
   if (w) {
+    // Set onload handler immediately
+    w.onload = () => {
+      setTimeout(() => {
+        printWhenReady(w);
+      }, 250);
+    };
+    
     const revoke = () => {
       try {
         URL.revokeObjectURL(blobUrl);
@@ -173,20 +184,36 @@ export async function printElementById(
     };
 
     w.addEventListener("afterprint", () => cleanup(), { once: true });
+    
+    // Also cleanup if window is closed manually
+    const checkClosed = setInterval(() => {
+      if (w.closed) {
+        clearInterval(checkClosed);
+        revoke();
+      }
+    }, 1000);
+    
     window.setTimeout(() => {
+      clearInterval(checkClosed);
       if (!w.closed) {
         revoke();
       }
     }, 60_000);
 
     const startPrint = () => {
-      printWhenReady(w);
+      // Wait a bit for content to render, then trigger print
+      setTimeout(() => {
+        printWhenReady(w);
+      }, 250); // Small delay to ensure content is rendered
     };
 
+    // Try to print as soon as possible
     if (w.document.readyState === "complete") {
       startPrint();
     } else {
       w.addEventListener("load", startPrint, { once: true });
+      // Fallback: also try after DOMContentLoaded
+      w.addEventListener("DOMContentLoaded", startPrint, { once: true });
     }
 
     return;
