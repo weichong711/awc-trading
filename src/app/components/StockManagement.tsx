@@ -1119,7 +1119,7 @@ export function StockManagement({
           </div>
 
           {/* Receipt-style report - this is what gets printed */}
-          <div id="stock-report-receipt" className="stock-report-print-area max-w-2xl mx-auto bg-white p-8 print:p-4">
+          <div id="stock-report-receipt" className="receipt-root stock-report-print-area max-w-2xl mx-auto bg-white p-8 print:p-4">
             {/* Receipt-style header with ASCII border */}
             <div className="border-4 border-dashed border-black p-6 mb-6 font-mono">
               <div className="text-center mb-4">
@@ -1260,7 +1260,7 @@ export function StockManagement({
             )}
 
             {/* Footer */}
-            <div className="border-4 border-dashed border-black p-4 text-center font-mono">
+            <div className="receipt-footer border-4 border-dashed border-black p-4 text-center font-mono">
               <p className="font-bold">— End —</p>
             </div>
           </div>
