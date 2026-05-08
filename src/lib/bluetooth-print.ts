@@ -15,6 +15,7 @@ const COMMANDS = {
   BOLD_ON: [ESC, 0x45, 0x01],
   BOLD_OFF: [ESC, 0x45, 0x00],
   FEED_LINES: (n: number) => [ESC, 0x64, n], // Feed n lines
+  FEED_AND_CUT: [ESC, 0x69], // Feed and cut (if supported)
   CUT_PAPER: [GS, 0x56, 0x00], // Full cut (if supported)
   PARTIAL_CUT: [GS, 0x56, 0x01], // Partial cut
 };
@@ -36,38 +37,70 @@ export async function printToBluetoothPrinter(
   deviceId?: string
 ): Promise<void> {
   try {
-    let device: BluetoothDevice;
+    let device: BluetoothDevice | undefined;
 
-    // Try to reconnect to saved device or request new one
+    // Try to reconnect to saved device first (no dialog!)
     if (deviceId) {
       try {
+        // Get previously authorized devices
         const devices = await navigator.bluetooth.getDevices();
-        const savedDevice = devices.find(d => d.id === deviceId);
-        if (savedDevice) {
-          device = savedDevice;
-        } else {
-          throw new Error("Saved device not found");
+        device = devices.find(d => d.id === deviceId);
+        
+        if (!device) {
+          console.log('Saved device not found in authorized devices');
+          // Device not found, will need to pair again
+          throw new Error("Device not found");
+        }
+        
+        console.log(`Found saved device: ${device.name || device.id}`);
+      } catch (error) {
+        console.error('Error getting saved device:', error);
+        // Fall through to request new device
+      }
+    }
+
+    // If no saved device or couldn't reconnect, request new one
+    if (!device) {
+      console.log('Requesting new Bluetooth device...');
+      device = await requestBluetoothDevice();
+      
+      // Save the new device ID
+      try {
+        const config = localStorage.getItem("printerConfig");
+        if (config) {
+          const parsed = JSON.parse(config);
+          parsed.deviceId = device.id;
+          parsed.deviceName = device.name || "Bluetooth Printer";
+          localStorage.setItem("printerConfig", JSON.stringify(parsed));
         }
       } catch {
-        // If can't get saved device, request new one
-        device = await requestBluetoothDevice();
+        // Ignore save errors
       }
-    } else {
-      device = await requestBluetoothDevice();
     }
 
     // Connect to device
+    console.log('Connecting to GATT server...');
     const server = await device.gatt?.connect();
     if (!server) {
       throw new Error("Failed to connect to printer");
     }
 
+    console.log('Connected! Finding printer characteristic...');
+    
     // Try to find the correct service and characteristic
     const { service, characteristic } = await findPrinterCharacteristic(server);
+
+    console.log('Found characteristic, initializing printer...');
 
     // Initialize printer
     await characteristic.writeValue(new Uint8Array(COMMANDS.INIT));
     await sleep(100);
+
+    // Add space at top (5 blank lines to separate from previous receipt)
+    await characteristic.writeValue(new Uint8Array(COMMANDS.FEED_LINES(5)));
+    await sleep(100);
+
+    console.log('Printing content...');
 
     // Print content line by line
     const lines = content.split('\n');
@@ -77,13 +110,16 @@ export async function printToBluetoothPrinter(
       await sleep(50); // Small delay between lines
     }
 
-    // Feed paper (6 lines for easy tearing)
-    await characteristic.writeValue(new Uint8Array(COMMANDS.FEED_LINES(6)));
-    await sleep(200);
+    console.log('Adding paper feed...');
+
+    // Add space at bottom (10 lines for easy tearing and to see full receipt)
+    await characteristic.writeValue(new Uint8Array(COMMANDS.FEED_LINES(10)));
+    await sleep(300);
 
     // Try to cut paper (some printers don't support this)
     try {
       await characteristic.writeValue(new Uint8Array(COMMANDS.PARTIAL_CUT));
+      await sleep(200);
     } catch {
       // Ignore if cut not supported
     }
