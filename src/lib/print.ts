@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import printFrameCss from "../styles/print-frame.css?raw";
 import { printToBluetoothPrinter, getSavedBluetoothDevice } from "./bluetooth-print";
+import { formatReceiptForThermal } from "./thermal-format";
 
 export type PrintTarget = "receipt" | "analytics" | "stock-report";
 
@@ -109,11 +110,16 @@ export async function printElementById(
 
   // Get text content for printing
   const content = el.innerText || el.textContent || '';
+  
+  // Format content for thermal printer if using Bluetooth
+  const thermalContent = finalConfig.printerType === "bluetooth" 
+    ? formatReceiptForThermal(el)
+    : content;
 
   // Try Bluetooth printing first if configured
   if (finalConfig.printerType === "bluetooth") {
     try {
-      await printToBluetooth(finalConfig.deviceId, content);
+      await printToBluetooth(finalConfig.deviceId, thermalContent);
       console.log('✅ Printed via Bluetooth');
       return; // Success!
     } catch (error) {
