@@ -1,7 +1,7 @@
 /**
- * Used ONLY inside a tiny iframe for “Print receipt / summary”.
+ * Used ONLY inside a tiny iframe for "Print receipt / summary".
  * Self-contained: no Tailwind from the main app, no visibility:hidden hacks.
- * Keeps output to one logical 80mm-wide receipt (height grows with content).
+ * Supports both 58mm and 80mm thermal printers (width set dynamically).
  */
 
 @page {
@@ -24,16 +24,16 @@ body {
 
 body {
   font-family: "Courier New", Courier, monospace;
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 9px; /* Smaller for 58mm */
+  line-height: 1.3;
   color: #000;
   background: #fff;
 }
 
 .receipt-root {
-  width: 80mm;
-  max-width: 80mm;
-  padding: 3mm;
+  width: 100%;
+  max-width: 100%;
+  padding: 2mm;
   box-sizing: border-box;
 }
 
@@ -43,7 +43,7 @@ body {
 
 .receipt-root h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.2;
 }
 
@@ -55,7 +55,7 @@ body {
   font-weight: bold;
 }
 
-/* Screen + print: receipt is the only content; no “hidden” tricks */
+/* Screen + print: receipt is the only content; no "hidden" tricks */
 .receipt-root .print-only {
   display: block !important;
 }
@@ -103,16 +103,16 @@ body {
   font-family: "Courier New", Courier, monospace !important;
 }
 .receipt-root .text-xl {
-  font-size: 14px !important;
+  font-size: 12px !important;
 }
 .receipt-root .text-base {
-  font-size: 10px !important;
+  font-size: 9px !important;
 }
 .receipt-root .text-sm {
-  font-size: 10px !important;
+  font-size: 9px !important;
 }
 .receipt-root .text-xs {
-  font-size: 9px !important;
+  font-size: 8px !important;
 }
 .receipt-root .text-green-600 {
   color: #16a34a !important;
@@ -197,4 +197,10 @@ body {
 /* One continuous strip; avoid weird blank pages from per-row break rules */
 .receipt-root {
   page-break-after: auto;
+}
+
+/* Ensure footer stays visible on small paper */
+.receipt-root .receipt-footer {
+  page-break-inside: avoid;
+  margin-top: 2mm;
 }
