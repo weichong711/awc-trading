@@ -100,16 +100,27 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
     setPrinterSuccess("");
 
     try {
+      // Request any Bluetooth device (no service filter for broader compatibility)
       const device = await navigator.bluetooth.requestDevice({
-        filters: [
-          { services: ["000018f0-0000-1000-8000-00805f9b34fb"] },
+        acceptAllDevices: true,
+        optionalServices: [
+          "000018f0-0000-1000-8000-00805f9b34fb", // Common thermal printer service
+          "49535343-fe7d-4ae5-8fa9-9fafd205e455", // Another common service
         ],
-        optionalServices: ["000018f0-0000-1000-8000-00805f9b34fb"],
       });
 
       setBluetoothDevice(device);
       setPrinterType("bluetooth");
-      setPrinterSuccess(`Connected to ${device.name || "Bluetooth Printer"}`);
+      
+      // Save to localStorage
+      localStorage.setItem("printerConfig", JSON.stringify({
+        paperWidth: parseInt(paperWidth),
+        printerType: "bluetooth",
+        deviceId: device.id,
+        deviceName: device.name,
+      }));
+      
+      setPrinterSuccess(`✓ Connected to ${device.name || "Bluetooth Printer"}`);
       setPrinterError("");
     } catch (err) {
       if (err instanceof Error) {
@@ -131,6 +142,13 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
   const handleDisconnectBluetooth = () => {
     setBluetoothDevice(undefined);
     setPrinterType("browser");
+    
+    // Update localStorage
+    localStorage.setItem("printerConfig", JSON.stringify({
+      paperWidth: parseInt(paperWidth),
+      printerType: "browser",
+    }));
+    
     setPrinterSuccess("Bluetooth printer disconnected");
     setTimeout(() => setPrinterSuccess(""), 3000);
   };
@@ -146,10 +164,11 @@ export function UserSettings({ currentUser, onUpdateUser, onLogout, onExportData
     localStorage.setItem("printerConfig", JSON.stringify({
       paperWidth: width,
       printerType,
+      deviceId: bluetoothDevice?.id,
       deviceName: bluetoothDevice?.name,
     }));
 
-    setPrinterSuccess("Printer settings saved successfully!");
+    setPrinterSuccess("✓ Printer settings saved successfully!");
     setTimeout(() => setPrinterSuccess(""), 3000);
   };
 
