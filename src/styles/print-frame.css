@@ -203,4 +203,10 @@ body {
 .receipt-root .receipt-footer {
   page-break-inside: avoid;
   margin-top: 2mm;
+  margin-bottom: 10mm; /* Add space after receipt for tear-off */
+}
+
+/* Add page break after receipt for multiple prints */
+.receipt-root {
+  page-break-after: always;
 }
