@@ -1,6 +1,6 @@
 /**
  * Format receipt content for thermal printers
- * Converts HTML-style receipt to plain text with proper formatting
+ * Converts HTML receipt element to clean plain text with proper formatting
  */
 
 const PAPER_WIDTH = 32; // Characters per line for 58mm paper
@@ -35,211 +35,185 @@ function twoColumns(left: string, right: string): string {
  * Takes HTML element and returns formatted plain text
  */
 export function formatReceiptForThermal(element: HTMLElement): string {
-  // Get all text content
-  const text = element.innerText || element.textContent || '';
+  const output: string[] = [];
   
-  console.log('=== THERMAL FORMATTER DEBUG ===');
-  console.log('Raw text:', text);
-  
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  
-  console.log('Parsed lines:', lines);
-  
-  let output: string[] = [];
-  
-  // Parse the receipt data
-  let businessName = '';
-  let username = '';
-  let phone = '';
-  let email = '';
-  let receiptNo = '';
-  let date = '';
-  let time = '';
-  let items: Array<{ name: string; details: string; total: string }> = [];
-  let subtotal = '';
-  let discount = '';
-  let total = '';
-  let payment = '';
-  let cashReceived = '';
-  let change = '';
-  
-  let inItems = false;
-  let currentItemName = '';
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  // Parse the receipt structure by looking at the actual DOM
+  try {
+    // Get business name (first h2 or text-xl element)
+    const businessNameEl = element.querySelector('h2, .text-xl');
+    const businessName = businessNameEl?.textContent?.trim() || 'RECEIPT';
     
-    console.log(`Line ${i}: "${line}"`);
+    // Get all text content organized by sections
+    const allDivs = element.querySelectorAll('div');
     
-    // Skip headers
-    if (line === 'OFFICIAL RECEIPT' || line === 'RECEIPT') {
-      continue;
-    }
+    let receiptNo = '';
+    let date = '';
+    let time = '';
+    let username = '';
+    let phone = '';
+    let email = '';
+    let items: Array<{ name: string; qty: string; price: string; total: string }> = [];
+    let subtotal = '';
+    let discount = '';
+    let total = '';
+    let payment = '';
+    let cashReceived = '';
+    let change = '';
     
-    // Business name (usually first non-header line)
-    if (!businessName && !line.includes(':') && !line.includes('RECEIPT') && i < 5) {
-      businessName = line;
-      console.log('Found business name:', businessName);
-      continue;
-    }
-    
-    // Extract fields with colons
-    if (line.includes(':')) {
-      const parts = line.split(':');
-      const key = parts[0].trim().toLowerCase();
-      const value = parts.slice(1).join(':').trim();
+    // Parse each div for data
+    allDivs.forEach((div) => {
+      const text = div.textContent?.trim() || '';
       
-      if (key.includes('username')) {
-        username = value;
-        console.log('Found username:', username);
-      } else if (key.includes('phone')) {
-        phone = value;
-        console.log('Found phone:', phone);
-      } else if (key.includes('email')) {
-        email = value;
-        console.log('Found email:', email);
-      } else if (key.includes('receipt')) {
-        receiptNo = value.replace('#', '');
-        console.log('Found receipt no:', receiptNo);
-      } else if (key.includes('date')) {
-        date = value;
-        console.log('Found date:', date);
-      } else if (key.includes('time')) {
-        time = value;
-        console.log('Found time:', time);
-      } else if (key.includes('subtotal')) {
-        subtotal = value;
-        inItems = false;
-        console.log('Found subtotal:', subtotal);
-      } else if (key.includes('total') && !key.includes('subtotal')) {
-        total = value;
-        console.log('Found total:', total);
-      } else if (key.includes('payment')) {
-        payment = value;
-        console.log('Found payment:', payment);
-      } else if (key.includes('cash') && key.includes('received')) {
-        cashReceived = value;
-        console.log('Found cash received:', cashReceived);
-      } else if (key.includes('change')) {
-        change = value;
-        console.log('Found change:', change);
+      // Receipt info
+      if (text.includes('Receipt No:') || text.includes('receiptNo')) {
+        const match = text.match(/#?(\d+)/);
+        if (match) receiptNo = match[1];
       }
-    }
+      if (text.includes('Date:') && !date) {
+        const match = text.match(/Date:\s*(.+)/);
+        if (match) date = match[1].trim();
+      }
+      if (text.includes('Time:') && !time) {
+        const match = text.match(/Time:\s*(.+)/);
+        if (match) time = match[1].trim();
+      }
+      
+      // Business info
+      if (text.includes('Username:') && !username) {
+        const match = text.match(/Username:\s*(.+)/);
+        if (match) username = match[1].trim();
+      }
+      if (text.includes('Phone') && !phone) {
+        const match = text.match(/Phone[^:]*:\s*(.+)/);
+        if (match) phone = match[1].trim();
+      }
+      if (text.includes('Email:') && !email) {
+        const match = text.match(/Email:\s*(.+)/);
+        if (match) email = match[1].trim();
+      }
+      
+      // Totals
+      if (text.includes('Subtotal:') && !subtotal) {
+        const match = text.match(/RM\s*([\d.]+)/);
+        if (match) subtotal = match[1];
+      }
+      if (text.includes('TOTAL:') && !total) {
+        const match = text.match(/RM\s*([\d.]+)/);
+        if (match) total = match[1];
+      }
+      if (text.includes('Payment:') && !payment) {
+        const match = text.match(/Payment:\s*(.+)/);
+        if (match) payment = match[1].trim();
+      }
+      if (text.includes('Cash Received:') && !cashReceived) {
+        const match = text.match(/RM\s*([\d.]+)/);
+        if (match) cashReceived = match[1];
+      }
+      if (text.includes('Change:') && !change) {
+        const match = text.match(/RM\s*([\d.]+)/);
+        if (match) change = match[1];
+      }
+      if (text.includes('Discount') && !discount) {
+        const match = text.match(/RM\s*([\d.]+)/);
+        if (match) discount = match[1];
+      }
+    });
     
-    // Items section
-    if (line === 'ITEMS' || line.toLowerCase().includes('items')) {
-      inItems = true;
-      console.log('Entering ITEMS section');
-      continue;
-    }
-    
-    // Parse items
-    if (inItems) {
-      // Check if this is a quantity/price line (contains "x RM" or "x rm")
-      if (line.match(/\d+\s+\w+\s+x\s+RM\s+[\d.]+/i)) {
-        // This is the details line: "1 unit x RM 25.00 RM 25.00"
-        const match = line.match(/(.*?)\s+(RM\s+[\d.]+)$/i);
-        if (match && currentItemName) {
-          const details = match[1].trim();
-          const itemTotal = match[2].trim();
-          items.push({
-            name: currentItemName,
-            details: details,
-            total: itemTotal
-          });
-          console.log('Added item:', { name: currentItemName, details, total: itemTotal });
-          currentItemName = '';
+    // Parse items - look for item structure
+    const itemDivs = element.querySelectorAll('div[class*="mb-2"]');
+    itemDivs.forEach((itemDiv) => {
+      const itemText = itemDiv.textContent || '';
+      
+      // Check if this looks like an item (has "x RM" pattern)
+      if (itemText.includes(' x RM ')) {
+        const lines = itemText.split('\n').map(l => l.trim()).filter(l => l);
+        
+        if (lines.length >= 2) {
+          const itemName = lines[0];
+          const detailLine = lines[1];
+          
+          // Parse: "1 unit x RM 25.00 RM 25.00"
+          const match = detailLine.match(/(\d+(?:\.\d+)?)\s+(\w+)\s+x\s+RM\s+([\d.]+)\s+RM\s+([\d.]+)/);
+          if (match) {
+            items.push({
+              name: itemName,
+              qty: match[1],
+              price: match[3],
+              total: match[4]
+            });
+          }
         }
-      } else if (!line.includes(':') && !line.includes('Thank you') && !line.includes('Please come')) {
-        // This is likely an item name
-        currentItemName = line;
-        console.log('Current item name:', currentItemName);
+      }
+    });
+    
+    // Build the formatted receipt
+    output.push(''); // Blank line at top
+    output.push(centerText(businessName));
+    output.push(centerText('OFFICIAL RECEIPT'));
+    output.push('');
+    
+    // Business info
+    if (username) output.push(twoColumns('Username:', username));
+    if (phone) output.push(twoColumns('Phone Number:', phone));
+    if (email) {
+      if (email.length > 20) {
+        output.push('Email:');
+        output.push('  ' + email);
+      } else {
+        output.push(twoColumns('Email:', email));
       }
     }
     
-    // Discount
-    if (line.toLowerCase().includes('discount')) {
-      discount = line;
-      console.log('Found discount:', discount);
-    }
-  }
-  
-  console.log('=== PARSED DATA ===');
-  console.log('Business:', businessName);
-  console.log('Username:', username);
-  console.log('Phone:', phone);
-  console.log('Email:', email);
-  console.log('Receipt No:', receiptNo);
-  console.log('Date:', date);
-  console.log('Time:', time);
-  console.log('Items:', items);
-  console.log('Subtotal:', subtotal);
-  console.log('Total:', total);
-  console.log('Payment:', payment);
-  
-  // Build formatted receipt - CLEAN FORMAT
-  output.push(''); // Blank line at top
-  output.push(centerText(businessName || 'RECEIPT'));
-  output.push(centerText('OFFICIAL RECEIPT'));
-  output.push('');
-  
-  // Business info
-  if (username) output.push(twoColumns('Username:', username));
-  if (phone) output.push(twoColumns('Phone Number:', phone));
-  if (email) {
-    // Split long email if needed
-    if (email.length > 20) {
-      output.push('Email:');
-      output.push('  ' + email);
+    output.push(dashedLine());
+    
+    // Receipt details
+    if (receiptNo) output.push(twoColumns('Receipt No:', '#' + receiptNo));
+    if (date) output.push(twoColumns('Date:', date));
+    if (time) output.push(twoColumns('Time:', time));
+    
+    output.push(dashedLine());
+    output.push('ITEMS');
+    output.push('');
+    
+    // Items
+    if (items.length > 0) {
+      for (const item of items) {
+        output.push(item.name);
+        const details = `${item.qty} unit x RM ${item.price}`;
+        output.push(twoColumns('  ' + details, 'RM ' + item.total));
+      }
     } else {
-      output.push(twoColumns('Email:', email));
+      output.push('(No items)');
     }
-  }
-  
-  output.push(dashedLine());
-  
-  // Receipt details
-  if (receiptNo) output.push(twoColumns('Receipt No:', '#' + receiptNo));
-  if (date) output.push(twoColumns('Date:', date));
-  if (time) output.push(twoColumns('Time:', time));
-  
-  output.push(dashedLine());
-  output.push('ITEMS');
-  output.push('');
-  
-  // Items
-  if (items.length > 0) {
-    for (const item of items) {
-      output.push(item.name);
-      output.push(twoColumns('  ' + item.details, item.total));
+    
+    output.push('');
+    output.push(dashedLine());
+    
+    // Totals
+    if (subtotal) output.push(twoColumns('Subtotal:', 'RM ' + subtotal));
+    if (discount) output.push(twoColumns('Discount:', '- RM ' + discount));
+    if (total) {
+      output.push(dashedLine());
+      output.push(twoColumns('TOTAL:', 'RM ' + total));
+      output.push(dashedLine());
     }
-  } else {
-    output.push('(No items found)');
-    console.warn('WARNING: No items were parsed!');
+    if (payment) output.push(twoColumns('Payment:', payment));
+    if (cashReceived) output.push(twoColumns('Cash Received:', 'RM ' + cashReceived));
+    if (change) output.push(twoColumns('Change:', 'RM ' + change));
+    
+    output.push('');
+    output.push(centerText('Thank you for your business!'));
+    output.push(centerText('Please come again'));
+    output.push('');
+    
+  } catch (error) {
+    console.error('Error formatting receipt:', error);
+    // Fallback to simple text extraction
+    output.push(element.innerText || element.textContent || 'Receipt');
   }
-  
-  output.push('');
-  output.push(dashedLine());
-  
-  // Totals
-  if (subtotal) output.push(twoColumns('Subtotal:', subtotal));
-  if (discount) output.push(discount);
-  if (total) {
-    output.push(dashedLine());
-    output.push(twoColumns('TOTAL:', total));
-    output.push(dashedLine());
-  }
-  if (payment) output.push(twoColumns('Payment:', payment));
-  if (cashReceived) output.push(twoColumns('Cash Received:', cashReceived));
-  if (change) output.push(twoColumns('Change:', change));
-  
-  output.push('');
-  output.push(centerText('Thank you for your business!'));
-  output.push(centerText('Please come again'));
-  output.push('');
   
   const result = output.join('\n');
-  console.log('=== FORMATTED OUTPUT ===');
+  console.log('=== FORMATTED RECEIPT ===');
   console.log(result);
   console.log('=== END ===');
   
