@@ -48,6 +48,7 @@ app.post('/print/serial', async (req, res) => {
         .style('bu')
         .size(1, 1)
         .text(content)
+        .feed(4)  // Feed 4 lines for spacing between receipts
         .cut()
         .close(() => {
           res.json({ 
@@ -119,6 +120,7 @@ app.post('/print/html', async (req, res) => {
         .align('lt')
         .size(0, 0)
         .text(text)
+        .feed(4)  // Feed 4 lines for spacing between receipts
         .cut()
         .close(() => {
           res.json({ 
