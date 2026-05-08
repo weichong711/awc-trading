@@ -112,10 +112,8 @@ export async function printElementById(
   // Get text content for printing
   const content = el.innerText || el.textContent || '';
   
-  // Format content for thermal printer if using Bluetooth
-  const thermalContent = finalConfig.printerType === "bluetooth" 
-    ? formatReceiptForThermal(el)
-    : content;
+  // Format content for thermal printer - use formatter for ALL direct printing methods
+  const thermalContent = formatReceiptForThermal(el);
 
   // Try Bluetooth printing first if configured
   if (finalConfig.printerType === "bluetooth") {
@@ -146,7 +144,7 @@ export async function printElementById(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            content,
+            content: thermalContent,
             ip: finalConfig.networkIp,
             port: finalConfig.networkPort || 9100,
           }),
@@ -186,7 +184,7 @@ export async function printElementById(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content,
+          content: thermalContent,
           port: 'COM7',
           baudRate: 9600,
         }),
