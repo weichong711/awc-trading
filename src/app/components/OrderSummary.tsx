@@ -178,7 +178,39 @@ export function OrderSummary({
   };
 
   const printReceipt = () => {
-    // Use an isolated print iframe for better mobile/tablet compatibility.
+    if (!lastOrder) return;
+    
+    // For Bluetooth printing, format the receipt directly from order data
+    const printerConfig = localStorage.getItem("printerConfig");
+    if (printerConfig) {
+      try {
+        const config = JSON.parse(printerConfig);
+        if (config.printerType === "bluetooth") {
+          // Import and use direct formatting
+          import("../../lib/format-receipt-text").then(({ formatOrderReceipt }) => {
+            const receiptText = formatOrderReceipt(lastOrder, businessProfile);
+            
+            // Import Bluetooth print function
+            import("../../lib/bluetooth-print").then(({ printToBluetoothPrinter }) => {
+              printToBluetoothPrinter(receiptText, config.deviceId)
+                .then(() => {
+                  console.log("✅ Printed successfully");
+                })
+                .catch((error) => {
+                  console.error("Print failed:", error);
+                  // Fallback to HTML printing
+                  void printElementById("print-receipt-orders", "receipt");
+                });
+            });
+          });
+          return;
+        }
+      } catch (error) {
+        console.error("Error parsing printer config:", error);
+      }
+    }
+    
+    // Fallback to HTML printing for browser print
     void printElementById("print-receipt-orders", "receipt");
   };
 
