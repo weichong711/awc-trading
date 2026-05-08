@@ -189,7 +189,7 @@ export function OrderSummary({
     createPortal(
       <div
         id="print-receipt-orders"
-        className="space-y-4 font-mono text-sm"
+        className="receipt-root print-only space-y-4 font-mono text-sm"
         aria-hidden
       >
         <ReceiptMerchantHeader profile={businessProfile} />
@@ -269,7 +269,7 @@ export function OrderSummary({
           )}
         </div>
 
-        <div className="text-center text-xs border-t border-dashed border-black pt-3">
+        <div className="receipt-footer text-center text-xs border-t border-dashed border-black pt-3">
           <p>{t.orders.thankYou}</p>
           <p className="mt-1">{t.orders.comeAgain}</p>
         </div>
