@@ -98,10 +98,8 @@ async function printToBluetooth(device: BluetoothDevice, content: string): Promi
 
 /**
  * Print a DOM node by id using a **minimal document** (no main-app Tailwind):
- * - Prefer `Blob` URL + new tab (mobile Chrome often prints the SPA if we print the main window).
- * - Do **not** use `noopener` on `window.open` — with `noopener`, many browsers return `null`
- *   to the opener, so `document.write` never runs and the user only sees `about:blank`.
- * - Fallback: hidden iframe print.
+ * - First tries silent printing via print server (no dialog, no new tab)
+ * - Falls back to browser print if print server is not available
  * - Supports custom paper width and Bluetooth printing.
  * - Auto-loads printer config from localStorage if not provided.
  */
@@ -131,6 +129,39 @@ export async function printElementById(
     }
   }
 
+  // Try silent printing first (no dialog, no new tab)
+  try {
+    const printServerAvailable = await fetch('http://localhost:3001/health', {
+      method: 'GET',
+      signal: AbortSignal.timeout(1000), // 1 second timeout
+    }).then(res => res.ok).catch(() => false);
+
+    if (printServerAvailable) {
+      // Get text content for silent printing
+      const content = el.innerText || el.textContent || '';
+      
+      if (content.trim()) {
+        const response = await fetch('http://localhost:3001/print/serial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            port: 'COM7',
+            baudRate: 9600,
+          }),
+        });
+
+        if (response.ok) {
+          console.log('✅ Printed silently via print server');
+          return; // Success! No dialog, no new tab
+        }
+      }
+    }
+  } catch (error) {
+    console.log('Print server not available, falling back to browser print');
+  }
+
+  // Fallback to browser print if silent printing failed
   const clone = el.cloneNode(true) as HTMLElement;
   clone.style.display = "block";
   clone.style.visibility = "visible";
