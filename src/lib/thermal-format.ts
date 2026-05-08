@@ -38,56 +38,17 @@ function twoColumns(left: string, right: string): string {
 }
 
 /**
- * Extract text content from HTML element
- */
-function extractTextFromElement(element: HTMLElement): {
-  businessName: string;
-  username: string;
-  phone: string;
-  email: string;
-  receiptNo: string;
-  date: string;
-  time: string;
-  items: Array<{ name: string; quantity: string; unit: string; price: string; total: string }>;
-  subtotal: string;
-  discount?: string;
-  total: string;
-  payment: string;
-  cashReceived?: string;
-  change?: string;
-} {
-  // This is a simplified extraction - you may need to adjust based on your HTML structure
-  const text = element.innerText || element.textContent || '';
-  
-  // Parse the text content (this is a basic implementation)
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-  
-  return {
-    businessName: lines[0] || 'Admin',
-    username: lines.find(l => l.includes('Username:'))?.split(':')[1]?.trim() || '',
-    phone: lines.find(l => l.includes('Phone Number:'))?.split(':')[1]?.trim() || '',
-    email: lines.find(l => l.includes('Email:'))?.split(':')[1]?.trim() || '',
-    receiptNo: lines.find(l => l.includes('Receipt No'))?.split(':')[1]?.trim() || '',
-    date: lines.find(l => l.includes('Date:'))?.split(':')[1]?.trim() || '',
-    time: lines.find(l => l.includes('Time'))?.split(':')[1]?.trim() || '',
-    items: [],
-    subtotal: lines.find(l => l.includes('Subtotal:'))?.split(':')[1]?.trim() || '',
-    total: lines.find(l => l.includes('TOTAL:'))?.split(':')[1]?.trim() || '',
-    payment: lines.find(l => l.includes('Payment'))?.split(':')[1]?.trim() || '',
-  };
-}
-
-/**
  * Format receipt for thermal printer
  * Takes HTML element and returns formatted plain text
  */
 export function formatReceiptForThermal(element: HTMLElement): string {
-  const content = element.innerText || element.textContent || '';
-  const lines = content.split('\n').map(l => l.trim()).filter(l => l);
+  // Get all text content
+  const text = element.innerText || element.textContent || '';
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   
   let output: string[] = [];
   
-  // Parse content
+  // Parse the receipt data
   let businessName = '';
   let username = '';
   let phone = '';
@@ -95,50 +56,76 @@ export function formatReceiptForThermal(element: HTMLElement): string {
   let receiptNo = '';
   let date = '';
   let time = '';
-  let items: Array<{ name: string; qty: string; price: string; total: string }> = [];
+  let items: Array<{ name: string; details: string; total: string }> = [];
   let subtotal = '';
+  let discount = '';
   let total = '';
   let payment = '';
-  let discount = '';
+  let cashReceived = '';
+  let change = '';
   
-  // Extract data from lines
+  let inItems = false;
+  let currentItem: { name: string; details: string; total: string } | null = null;
+  
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
     
-    if (i === 0 && !line.includes(':')) {
+    // Business name (first line, usually)
+    if (i === 0 && !line.includes(':') && !line.includes('RECEIPT')) {
       businessName = line;
-    } else if (line.includes('Username:')) {
-      username = line.split(':')[1]?.trim() || '';
-    } else if (line.includes('Phone Number:')) {
-      phone = line.split(':')[1]?.trim() || '';
-    } else if (line.includes('Email:')) {
-      email = line.split(':')[1]?.trim() || '';
+      continue;
+    }
+    
+    // Skip "OFFICIAL RECEIPT" header
+    if (line.includes('OFFICIAL RECEIPT')) continue;
+    
+    // Extract fields
+    if (line.startsWith('Username:')) {
+      username = line.replace('Username:', '').trim();
+    } else if (line.startsWith('Phone Number:')) {
+      phone = line.replace('Phone Number:', '').trim();
+    } else if (line.startsWith('Email:')) {
+      email = line.replace('Email:', '').trim();
     } else if (line.includes('Receipt No')) {
-      receiptNo = line.split(':')[1]?.trim() || line.split('#')[1]?.trim() || '';
-    } else if (line.includes('Date:')) {
-      date = line.split(':')[1]?.trim() || '';
-    } else if (line.includes('Time')) {
-      time = line.split(':').slice(1).join(':').trim() || '';
-    } else if (line.includes('Subtotal:')) {
-      subtotal = line.split(':')[1]?.trim() || '';
-    } else if (line.includes('TOTAL:')) {
-      total = line.split(':')[1]?.trim() || '';
-    } else if (line.includes('Payment')) {
-      payment = line.split(':')[1]?.trim() || line.replace('Payment', '').trim();
+      receiptNo = line.split(/[:#]/).pop()?.trim() || '';
+    } else if (line.startsWith('Date:')) {
+      date = line.replace('Date:', '').trim();
+    } else if (line.startsWith('Time')) {
+      time = line.replace(/^Time[:\s]*/, '').trim();
+    } else if (line === 'ITEMS' || line.includes('ITEMS')) {
+      inItems = true;
+    } else if (line.startsWith('Subtotal:')) {
+      inItems = false;
+      subtotal = line.replace('Subtotal:', '').trim();
     } else if (line.includes('Discount')) {
       discount = line;
-    } else if (line.includes(' x RM ') || line.includes(' x rm ')) {
-      // Item line: "1 unit x RM 25.00 RM 25.00"
-      const parts = line.split(' x ');
-      if (parts.length >= 2) {
-        const qtyUnit = parts[0].trim();
-        const priceTotal = parts[1].replace(/RM|rm/gi, '').trim().split(/\s+/);
-        items.push({
-          name: lines[i - 1] || '', // Previous line is item name
-          qty: qtyUnit,
-          price: priceTotal[0] || '',
-          total: priceTotal[priceTotal.length - 1] || '',
-        });
+    } else if (line.startsWith('TOTAL:')) {
+      total = line.replace('TOTAL:', '').trim();
+    } else if (line.startsWith('Payment')) {
+      payment = line.replace(/^Payment[:\s]*/, '').trim();
+    } else if (line.includes('Cash Received') || line.includes('Tendered')) {
+      cashReceived = line.split(':').pop()?.trim() || '';
+    } else if (line.includes('Change:')) {
+      change = line.split(':').pop()?.trim() || '';
+    } else if (inItems && line.length > 0) {
+      // Check if this is an item detail line (contains "x RM" or "x rm")
+      if (line.includes(' x RM ') || line.includes(' x rm ')) {
+        // This is the quantity/price line
+        // Format: "1 unit x RM 25.00 RM 25.00"
+        const parts = line.split(/RM\s+/i);
+        const qtyPart = parts[0]?.trim() || '';
+        const totalPart = parts[parts.length - 1]?.trim() || '';
+        
+        if (currentItem) {
+          currentItem.details = qtyPart;
+          currentItem.total = 'RM ' + totalPart;
+          items.push(currentItem);
+          currentItem = null;
+        }
+      } else if (!line.includes('Thank you') && !line.includes('Please come')) {
+        // This is likely an item name
+        currentItem = { name: line, details: '', total: '' };
       }
     }
   }
@@ -178,10 +165,9 @@ export function formatReceiptForThermal(element: HTMLElement): string {
   for (const item of items) {
     if (item.name) {
       output.push(item.name);
-      output.push(twoColumns(
-        `  ${item.qty}`,
-        `RM ${item.total}`
-      ));
+      if (item.details && item.total) {
+        output.push(twoColumns('  ' + item.details, item.total));
+      }
     }
   }
   
@@ -196,6 +182,8 @@ export function formatReceiptForThermal(element: HTMLElement): string {
     output.push(doubleLine());
   }
   if (payment) output.push(twoColumns('Payment:', payment));
+  if (cashReceived) output.push(twoColumns('Cash Received:', cashReceived));
+  if (change) output.push(twoColumns('Change:', change));
   
   output.push('');
   output.push(dashedLine());
